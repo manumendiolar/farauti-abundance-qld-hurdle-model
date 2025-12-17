@@ -40,3 +40,7 @@ code/Shiny-app/interactive_map_centroids.R
 code/Shiny-app/models_dashboard.R
 code/Shiny-app/r-dashboard.Rproj
 code/Shiny-app/test2.R
+
+# README files
+README.html
+README_files/
