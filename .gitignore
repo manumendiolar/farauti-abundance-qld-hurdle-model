@@ -1,0 +1,42 @@
+
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# renv (keep lockfile + activate.R, ignore local library)
+renv/library/
+renv/staging/
+renv/python/
+renv/profiles/
+renv/settings.dcf
+
+# Outputs / big data
+outputs/
+data/*.fst
+data/*.RData
+data/*.rds
+data/**/*.tif
+data/**/*.tiff
+data/**/*.grd
+data/**/*.img
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+
+# Data upon request
+data/ab.csv
+data/occ.csv
+
+# Shinny app
+code/Shiny-app/functions/
+code/Shiny-app/results/
+code/Shiny-app/hurdle_model_map.R
+code/Shiny-app/hurdle_model_maps_ts.R
+code/Shiny-app/hurdle_model_maps.R
+code/Shiny-app/interactive_map_centroids.R
+code/Shiny-app/models_dashboard.R
+code/Shiny-app/r-dashboard.Rproj
+code/Shiny-app/test2.R
