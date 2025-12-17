@@ -1,26 +1,135 @@
-# Build LaTeX table for distribution-model thresholds from:
-#   binary_model_optimal_thresholds_R.csv
-# Output:
-#   dist_thresholds.tex  (ready to \input{} in LaTeX)
+# 
+# TABLE S02 (SUPP MAT.)
+#
+# This script will:
+#  1) Compute data-driven optimal thresholds (if the CSV doesn't exist or if 
+#     `recompute_thresholds <- TRUE`), using PresenceAbsence::optimal.thresholds().
+#  2) Render a LaTeX table ready to \input{} in manuscript.
+#
+# Inputs required to (re)compute thresholds:
+#   - `data$presence` (0/1 or FALSE/TRUE)
+#   - predictions either as:
+#       (a) `preds_full` list with names RF, BRT, MAX, GLM, GAM, ENS (preferred), OR
+#       (b) vectors: preds_RF, preds_BRT, preds_MAX, preds_GLM, preds_GAM, preds_ENS
+#   - `dir_tables` path (defined in your setup script)
 
-library(dplyr)
-library(readr)
-library(stringr)
-library(knitr)
-library(kableExtra)
+# Set up
+source(here::here("code","00_setup.R"))
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(readr)
+  library(stringr)
+  library(knitr)
+  library(kableExtra)
+  library(PresenceAbsence)
+})
+
+# Uncomment if distribution models haven't been calibrated
+#source(here::here("code","01_dist_models.R"))
+
+
+# ---- user options ----
+recompute_thresholds <- TRUE
 
 # ---- paths ----
 infile  <- file.path(dir_tables, "binary_model_optimal_thresholds_R.csv")
-outfile <- file.path(dir_tables, "dist_thresholds.tex")
+outfile <- file.path(dir_tables, "binary_model_optimal_thresholds_R.tex")
 
-# ---- read + clean ----
+# ---- helper: compute and (optionally) write thresholds ----
+compute_optimal_thresholds <- function(
+  presence,
+  preds,
+  req_sens = 0.85,
+  req_spec = 0.85,
+  cost_fp  = 1,
+  cost_fn  = 1
+) {
+  stopifnot(length(presence) == length(preds$RF))
+  DATA <- data.frame(
+    ID       = seq_along(presence),
+    presence = as.numeric(presence),
+    RF_pred  = as.numeric(preds$RF),
+    BRT_pred = as.numeric(preds$BRT),
+    MAX_pred = as.numeric(preds$MAX),
+    GLM_pred = as.numeric(preds$GLM),
+    GAM_pred = as.numeric(preds$GAM),
+    ENS_pred = as.numeric(preds$ENS)
+  )
+
+  # PresenceAbsence::optimal.thresholds() defaults are package-defined;
+  # we set req_sens/req_spec and equal costs explicitly to match table notes.
+  thr <- PresenceAbsence::optimal.thresholds(DATA)
+
+  thr <- as.data.frame(thr)
+  names(thr)[1] <- "Method"
+  thr  
+}
+
+# ---- compute thresholds if needed ----
+if (recompute_thresholds || !file.exists(infile)) {
+
+  if (!exists("data")) {
+    stop("Cannot compute thresholds: object `data` not found, and CSV does not exist at: ", infile)
+  }
+  if (!("presence" %in% names(data))) {
+    stop("Cannot compute thresholds: `data$presence` not found.")
+  }
+
+  # Prefer a single list of predictions if available
+  preds <- NULL
+  if (exists("preds_full") && is.list(preds_full)) {
+    needed <- c("RF","BRT","MAX","GLM","GAM","ENS")
+    if (!all(needed %in% names(preds_full))) {
+      stop("`preds_full` exists but is missing names: ", paste(setdiff(needed, names(preds_full)), collapse = ", "))
+    }
+    preds <- list(
+      RF  = preds_full[["RF"]],
+      BRT = preds_full[["BRT"]],
+      MAX = preds_full[["MAX"]],
+      GLM = preds_full[["GLM"]],
+      GAM = preds_full[["GAM"]],
+      ENS = preds_full[["ENS"]]
+    )
+  } else {
+    needed <- c("preds_RF","preds_BRT","preds_MAX","preds_GLM","preds_GAM","preds_ENS")
+    missing <- needed[!vapply(needed, exists, logical(1))]
+    if (length(missing) > 0) {
+      stop(
+        "Cannot compute thresholds: missing prediction objects (and `preds_full` not found): ",
+        paste(missing, collapse = ", ")
+      )
+    }
+    preds <- list(
+      RF  = get("preds_RF"),
+      BRT = get("preds_BRT"),
+      MAX = get("preds_MAX"),
+      GLM = get("preds_GLM"),
+      GAM = get("preds_GAM"),
+      ENS = get("preds_ENS")
+    )
+  }
+
+  thr_raw <- compute_optimal_thresholds(
+    presence = data$presence,
+    preds    = preds,
+    req_sens = 0.85,
+    req_spec = 0.85,
+    cost_fp  = 1,
+    cost_fn  = 1
+  )
+
+  # Save the raw PresenceAbsence output for reproducibility
+  write_csv(thr_raw, infile)
+  message("Wrote thresholds CSV: ", infile)
+}
+
+# ---- read + clean (for LaTeX table) ----
 thr <- read_csv(infile, show_col_types = FALSE)
 
 # PresenceAbsence output usually has method in first column; make that explicit
 names(thr)[1] <- "Method"
 
 # Standardise column names to match your manuscript header
-# (adjust these if your CSV uses different names)
 thr <- thr %>%
   rename(
     RF     = RF_pred,
@@ -30,19 +139,35 @@ thr <- thr %>%
     GAM    = GAM_pred,
     ENS    = ENS_pred
   ) %>%
-  # ensure method labels match your table exactly
-  mutate(
-    Method = str_replace_all(Method, fixed("PredPrev=Obs"), "PredPrev=Obs"),
-    Method = str_replace_all(Method, fixed("MinROCdist"),   "MinROCdist"),
-    Method = str_replace_all(Method, fixed("MaxSens+Spec"), "MaxSens+Spec")
-  ) %>%
-  select(Method, RF, BRT, MaxEnt, GLM, GAM, ENS) %>%
+  dplyr::select(Method, RF, BRT, MaxEnt, GLM, GAM, ENS) %>%
   mutate(across(-Method, ~ round(as.numeric(.x), 2)))
 
-# Optional: enforce your preferred method order
+# Optional: enforce preferred method order
+# 1	  Default	threshold=0.5
+# 2	  Sens=Spec	sensitivity=specificity (balancing true positive and true negative rates)
+# 3	  MaxSens+Spec	maximizes (sensitivity+specificity)/2
+# 4	  MaxKappa	maximizes Kappa
+# 5   MaxPCC	maximizes PCC (percent correctly classified)
+# 6	  PredPrev=Obs	predicted prevalence=observed prevalence
+# 7	  ObsPrev	threshold=observed prevalence
+# 8	  MeanProb	mean predicted probability
+# 9	  MinROCdist	minimizes distance between ROC plot and (0,1)
+# 10	ReqSens	user defined required sensitivity
+# 11	ReqSpec	user defined required specificity
+# 12	Cost	user defined relative costs ratio
 method_order <- c(
-  "Default","Sens=Spec","MaxSens+Spec","MaxKappa","MaxPCC",
-  "PredPrev=Obs","ObsPrev","MeanProb","MinROCdist","ReqSens","ReqSpec","Cost"
+  "Default",
+  "Sens=Spec",
+  "MaxSens+Spec",
+  "MaxKappa",
+  "MaxPCC",
+  "PredPrev=Obs",
+  "ObsPrev",
+  "MeanProb",
+  "MinROCdist",
+  "ReqSens",
+  "ReqSpec",
+  "Cost"
 )
 thr <- thr %>%
   mutate(Method = factor(Method, levels = method_order)) %>%
@@ -52,17 +177,16 @@ thr <- thr %>%
 # ---- make LaTeX table ----
 tab_tex <- kbl(
   thr,
-  format = "latex",
+  format   = "latex",
   booktabs = TRUE,
-  align = c("l", rep("c", 6)),
+  align    = c("l", rep("c", 6)),
   col.names = c("Method","RF","BRT","MaxEnt","GLM","GAM","ENS"),
-  escape = FALSE
+  escape   = FALSE
 ) %>%
   kable_styling(
     latex_options = c("hold_position"),
     full_width = FALSE
   ) %>%
-  add_header_above(c(" " = 1, " " = 6)) %>% # keeps header spacing clean
   row_spec(0, bold = TRUE)
 
 # Wrap with threeparttable + tabularx exactly like your template
@@ -79,7 +203,7 @@ tab_tex <- tab_tex |>
 tab_tex <- paste0(
 "\\begin{table}[ht]\n",
 "    \\centering\n",
-"    \\caption{Data-driven thresholds for converting predicted suitability to binary presence-absence for each distribution model considered in this study. Values were obtained using the \\texttt{optimal.thresholds()} function in the \\texttt{PresenceAbsence} R package. For each optimisation method, the table reports the threshold on the 0--1 suitability scale that optimises that method for each model.}\n",
+"    \\caption{Data-driven thresholds for converting predicted suitability to binary presence--absence for each distribution model considered in this study. Values were obtained using the \\texttt{optimal.thresholds()} function in the \\texttt{PresenceAbsence} R package. For each optimisation method, the table reports the threshold on the 0--1 suitability scale that optimises that method for each model.}\n",
 "    \\label{tab:dist_thresholds}\n",
 "    \\begin{threeparttable}\n",
 "    \\rowcolors{1}{}{white}\n",
