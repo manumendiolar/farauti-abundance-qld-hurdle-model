@@ -1,5 +1,5 @@
 
-# *Anopheles farauti* – Abundance paper (Hurdle modelling approach)
+# *Anopheles farauti* abundance in Queensland: a hurdle modelling approach
 
 This repo contains R scripts to reproduce the results in *Anopheles farauti* abundance in Queensland: a hurdle modelling approach.
 
