@@ -49,3 +49,44 @@ source("scripts/predictions_at_centroids.R")
 source("code/paper_fig_05.R")
 ```
 Results (tables, plots, rasters) will be written under outputs/ in case-specific subfolders when defined.
+
+## 🦟 Interactive Shiny app
+
+This repository includes a Shiny dashboard for exploring predicted *Anopheles farauti* hurdle-model abundance and suitability across Queensland.
+
+#### Requirements
+- R (>= 4.2 recommended)
+- RStudio (optional)
+- Packages managed via `renv`
+
+### 📦 Large data file (not stored in GitHub)
+
+The Shiny app requires the predictions file:
+
+- `centroids_5x5_qld_with_predictions.fst`
+
+This file is too large for GitHub and is hosted externally here:
+- **Download (Zenodo/OSF):** <PASTE YOUR LINK HERE>
+
+After downloading, place it in:
+
+`outputs/predictions/centroids_5x5_qld_with_predictions.fst`
+
+(Or set `FARAUTI_PRED_DIR` to the folder containing the file; see below.)
+
+### ▶️ Run the Shiny app locally
+
+1. Clone the repository
+2. Open the `.Rproj` in RStudio
+3. Restore packages:
+
+```r
+install.packages("renv")   # if needed
+renv::restore()
+```
+4. Ensure the predictions file is available (see “Large data file” above)
+5. Run the app:
+```r
+shiny::runApp()
+```
+
