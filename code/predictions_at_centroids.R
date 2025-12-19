@@ -45,7 +45,7 @@ centroids$zinb_abund <- as.numeric(predict(ZINBa, newdata = centroids, type = "r
 
 # Add predictions from binary component from all models explored
 rf_prediction <- rast(file.path(dir_pred, "rf_prediction.asc"))
-brt_prediction <- rast(file.path(dir_pred, "brt_prediction.asc"))
+  brt_prediction <- rast(file.path(dir_pred, "brt_prediction.asc"))
 max_prediction <- rast(file.path(dir_pred, "max_prediction.asc"))
 glm_prediction <- rast(file.path(dir_pred, "glm_prediction.asc"))
 gam_prediction <- rast(file.path(dir_pred, "gam_prediction.asc"))
