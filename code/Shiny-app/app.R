@@ -160,7 +160,7 @@ ui <- fluidPage(
             selectInput("abund_model_h", "Abundance model (conditional on presence)",
                         choices = c("RF"="rf","BRT"="brt","GLM"="glm","GAM"="gam","ENS"="ens"),
                         selected = "rf"),
-            numericInput("tau_h", label = HTML("Threshold &tau;"), value = 0.25, min = 0, max = 1, step = 0.25),
+            numericInput("tau_h", label = HTML("Threshold &tau;"), value = 0.25, min = 0, max = 1, step = 0.05),
             selectInput("conf", "Predictive interval",
                         choices = c("90%"=0.90, "95%"=0.95, "99%"=0.99),
                         selected = 0.95),
