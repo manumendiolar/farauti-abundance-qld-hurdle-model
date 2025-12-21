@@ -45,7 +45,7 @@ centroids$zinb_abund <- as.numeric(predict(ZINBa, newdata = centroids, type = "r
 
 # Add predictions from binary component from all models explored
 rf_prediction <- rast(file.path(dir_pred, "rf_prediction.asc"))
-  brt_prediction <- rast(file.path(dir_pred, "brt_prediction.asc"))
+brt_prediction <- rast(file.path(dir_pred, "brt_prediction.asc"))
 max_prediction <- rast(file.path(dir_pred, "max_prediction.asc"))
 glm_prediction <- rast(file.path(dir_pred, "glm_prediction.asc"))
 gam_prediction <- rast(file.path(dir_pred, "gam_prediction.asc"))
@@ -84,7 +84,7 @@ centroids$mu_ens <- as.numeric(
 )
 
 # Compute Hurdle predictions for different thresholds 
-for (thres in c(0.00, 0.25, 0.50, 0.75, 0.95)){
+for (thres in seq(0, 1, 0.01)){
   thres_lbl <- gsub("\\.", "", sprintf("%.2f", thres)) # Formatting
   for (binary_model in c("rf", "brt", "max", "glm", "gam", "ens")){
     pi_col <- paste0("pi_", binary_model)                                                            # Name of pi prediction column
@@ -103,3 +103,46 @@ head(centroids)
 
 # Save as .fst file
 fst::write_fst(centroids, file.path(dir_pred, "centroids_5x5_qld_with_predictions.fst"), compress = 50)
+
+
+
+#
+# BUILD A SLIM CENTROID FILE FOR SHINY APP 
+#
+# Columns needed for Shiny:
+# - location/time keys: grid_id, lon, lat, date, year, month, season
+# - predictions needed to recompute hurdle: pi_* and mu_*
+keep_cols <- c(
+  "grid_id", "lon", "lat",
+  "date", "year", "month", "season",
+  "zip_abund", "zinb_abund",
+  paste0("pi_", c("rf","brt","max","glm","gam","ens")),
+  paste0("mu_", c("rf","brt","glm","gam","ens"))
+)
+
+centroids_shiny <- centroids |> 
+  # Drop *all* threshold-derived columns if they exist
+  dplyr::select(
+    -matches("_class_t\\d+$"),
+    -matches("_t\\d+_abund$")
+  ) |> 
+  # Keep only the minimal set (any_of avoids errors if a col is missing)
+  dplyr::select(any_of(keep_cols)) |> 
+  # Make sure key columns are sensible types for Shiny filtering
+  dplyr::mutate(
+    date   = as.Date(date),
+    year   = as.integer(as.character(year)),
+    month  = as.integer(as.character(month)),
+    season = as.character(season)
+  )
+
+# Quick sanity check
+message("Shiny centroids columns: ", ncol(centroids_shiny))
+print(names(centroids_shiny))
+
+# Write file (higher compress => smaller file for Zenodo / sharing)
+out_path <- file.path(dir_pred, "centroids_5x5_qld_with_predictions_shiny-app.fst")
+fst::write_fst(centroids_shiny, out_path, compress = 100)
+
+message("Wrote: ", out_path)
+message("Approx file size (MB): ", round(file.info(out_path)$size / 1024^2, 1))
