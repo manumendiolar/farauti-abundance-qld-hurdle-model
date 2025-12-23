@@ -1,11 +1,11 @@
 
 # *Anopheles farauti* abundance in Queensland: a hurdle modelling approach manuscript
 
-This repo contains R scripts to reproduce the results in *Anopheles farauti* abundance in Queensland: a hurdle modelling approach.
+This repo contains R scripts to reproduce the results in *Anopheles farauti* abundance in Queensland: a hurdle modelling approach:
 
- - Fit **distribution models** (hurdle 1st component, presence-absence models).
- - Fit **abundance models** (hurdle 2nd component, truncated count models).
- - Fit **zero-inflated models** (one-framework for comparison). 
+ - `01_dist_models.R`: Fit **distribution models** (presence-absence models).
+ - `02_abund_models.R`: Fit **abundance models** (truncated count models).
+ - `03_zi_models.R`: Fit **zero-inflated models** (one-framework for comparison). 
  
 with **repeated K-fold cross-validation**.
  
@@ -46,7 +46,7 @@ source("code/03_zi_models.R")
 source("scripts/predictions_at_centroids.R")
 
 # Optional: Map + time series plot (QLD)
-source("code/paper_fig_05.R")
+source("code/paper_fig_04.R")
 ```
 Results (tables, plots, rasters) will be written under outputs/ in case-specific subfolders when defined.
 
@@ -59,20 +59,20 @@ This repository includes a Shiny dashboard for exploring predicted *Anopheles fa
 - RStudio (optional)
 - Packages managed via `renv`
 
-### 📦 Large data file (not stored in GitHub)
+#### 📦 Large data file (not stored in GitHub)
 
 The Shiny app requires the predictions file:
 
-- `centroids_5x5_qld_with_predictions.fst`
+- `centroids_5x5_qld_with_predictions_shiny-app.fst`
 
-This file is too large for GitHub and is hosted externally here:
-- **Download (Zenodo/OSF):** <PASTE YOUR LINK HERE>
+Because this file is too large for GitHub, it is hosted externally in Zenodo. Steps:
 
-After downloading, place it in:
+1. Download the `.fst` file from the Zenodo record (see “Data availability” / Zenodo link <https://zenodo.org/records/17984922/files/centroids_5x5_qld_with_predictions_shiny-app.fst?download=1>).
+2. Place it here (inside cloned repo):
 
-`outputs/predictions/centroids_5x5_qld_with_predictions.fst`
+`outputs/predictions/centroids_5x5_qld_with_predictions_shiny-app.fst`
 
-(Or set `FARAUTI_PRED_DIR` to the folder containing the file; see below.)
+3. Run the app.
 
 ### ▶️ Run the Shiny app locally
 
@@ -90,3 +90,12 @@ renv::restore()
 shiny::runApp()
 ```
 
+## 📌 Data availability and citation
+
+The large predictions file used by the Shiny app is hosted on Zenodo:
+
+Zenodo record: https://zenodo.org/records/17984922
+
+How to cite:
+
+Mendiolar, M. (2025). Centroids with predictions: *Anopheles farauti* predicted abundance using hurdle model (Queensland, 5km grid) [Data set]. Zenodo. https://doi.org/10.5281/zenodo.17984922
