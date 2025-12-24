@@ -22,6 +22,7 @@ data/**/*.tiff
 data/**/*.grd
 data/**/*.img
 
+
 # OS / Editor junk
 .DS_Store
 Thumbs.db
