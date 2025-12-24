@@ -4,10 +4,15 @@
 # ------------------------------------------------------------------------------
 
 extract_metrics <- function(obs, prob, thr) {
-  roc_obj <- roc(obs, prob)
+
+  # Coerce to clean types
+  #obs  <- as.integer(obs)
+  #prob <- as.numeric(prob)
+
+  roc_obj <- pROC::roc(obs, prob)
   auc_val <- as.numeric(pROC::auc(roc_obj))
   cls     <- factor(ifelse(prob > thr, 1, 0), levels=c(0,1))
-  cm      <- confusionMatrix(cls, factor(obs), positive="1")
+  cm      <- caret::confusionMatrix(cls, factor(obs), positive="1")
   
   # Extract confusion matrix counts for MCC calculation
   tp <- as.numeric(cm$table[2,2])
@@ -79,11 +84,15 @@ save_cv_rast <- function(r, model, rep_i, fold_i) {
 # ------------------------------------------------------------------------------
 
 get_metrics <- function(obs, pred) {
+
+  #obs  <- as.numeric(obs)
+  #pred <- as.numeric(pred)
+
   data.frame(
     RMSE = RMSE(pred, obs),
     MAE = MAE(pred, obs),
-    Pearson = cor(obs, pred, method = "pearson"),
-    Spearman = cor(obs, pred, method = "spearman")
+    Pearson = suppressWarnings(stats::cor(obs, pred, method = "pearson")),
+    Spearman = suppressWarnings(stats::corcor(obs, pred, method = "spearman"))
   )
 }
 
