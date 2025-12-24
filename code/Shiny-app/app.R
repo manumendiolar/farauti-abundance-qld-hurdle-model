@@ -34,33 +34,8 @@ needed_cols <- c(
   paste0("mu_", c("rf","brt","glm","gam","ens"))
 )
 
-# ---- App metadata ------------------------------------------------------------
-APP_TITLE   <- "Identifying mozzie hotspots"
-APP_SUBTITLE <- "Abundance across Queensland using hurdle models"
-
-# Put the names you want shown in the About tab:
-APP_AUTHORS <- c(
-  "Manuela Mendiolar" #,
-  #"CO-AUTHOR NAME 2",
-  #"CO-AUTHOR NAME 3"
-)
-
-# Optional (shows a contact line)
-APP_CONTACT <- "manuela.mendiolar@csiro.au"
-# Optional (if you want a citation line)
-APP_CITATION <- "Please cite: https://doi.org/10.5281/zenodo.17984922."
 
 
-
-# -----------------------------------------------------------------------------
-# UI helpers (small "pretty" wrappers)
-# -----------------------------------------------------------------------------
-infoPill <- function(label, value) {
-  div(class = "pill",
-      span(class = "pill-label", label),
-      span(class = "pill-value", value)
-  )
-}
 
 # ==========================================
 # UI
@@ -122,9 +97,9 @@ ui <- fluidPage(
             column(6, numericInput("p_wet", "Wet season", value = 1.23, min = 0.0001, step = 0.01)),
             column(6, numericInput("p_dry", "Dry season", value = 1.66, min = 0.0001, step = 0.01))
           ),
-          tags$h4("Uncertainty bands"),
-          sliderInput("conf", "Confidence", min = 0.5, max = 0.99, value = 0.95, step = 0.01),
-          numericInput("theta_nb", "NegBin theta (size)", value = 8, min = 0.01, step = 0.1),
+          tags$h4("Predictive interval"),
+          sliderInput("conf", "Coverage (e.g., 95%)", min = 0.5, max = 0.99, value = 0.95, step = 0.01),
+          numericInput("theta_nb", "Overdispersion (NB 'size')", value = 8, min = 0.01, step = 0.1),
           actionButton("update_hurdle", "Update map"),
           hr(),
           tags$h4("Status"),
@@ -132,7 +107,7 @@ ui <- fluidPage(
           verbatimTextOutput("centroids_path_txt")
         ),
         mainPanel(
-          width = 8,
+          width = 9,
           leafletOutput("hurdle_map", height = 520),
           hr(),
           div(
@@ -159,8 +134,7 @@ ui <- fluidPage(
             "Override with env var FARAUTI_CENTROIDS: ", tags$code(if (nzchar(env_centroids)) env_centroids else "<not set>")
           )
         ),
-        div(class="card", tags$h4("Loaded data preview"), DTOutput("head_dt")) #,
-        #div(class="card", tags$h4("Computed map_dt preview"), DTOutput("map_preview"))
+        div(class="card", tags$h4("Loaded data preview"), DTOutput("head_dt"))
       )
     ),
     # ABOUT TAB
@@ -195,7 +169,7 @@ ui <- fluidPage(
               div(style="height:14px;"),
               tags$h4("Authors"),
               p("Manuela Mendiolar"),
-              p(tags$b("Contact:"), " manuela.mendiolar@csiro.au"),
+              p("manuela.mendiolar@csiro.au"),
               div(style="height:14px;"),
               tags$h4("Citation"),
               p("Please cite: ", tags$code("https://doi.org/10.5281/zenodo.17984922"))
@@ -516,27 +490,6 @@ server <- function(input, output, session) {
   
   # ---- For the DATA TAB ----
   
-  # show computed table
-  output$map_preview <- renderDT({
-    md <- map_dt_rv()
-    req(md)
-    md_show <- head(md[order(-mean_abund)], 50)  # show more if you want
-    dt_out <- DT::datatable(
-      md_show,
-      rownames = FALSE,
-      options = list(
-        pageLength = 10,
-        scrollX = TRUE,
-        dom = "tip",
-        columnDefs = list(
-          list(targets = 0, visible = FALSE)  # hide first column (grid_id)
-          )
-      )
-    )
-    # round ALL numeric columns to 2 dp
-    num_cols <- names(md_show)[vapply(md_show, is.numeric, logical(1))]
-    DT::formatRound(dt_out, columns = num_cols, digits = 2)
-  })
   # show centroids table
   output$head_dt <- renderDT({
     dt <- centroids()
