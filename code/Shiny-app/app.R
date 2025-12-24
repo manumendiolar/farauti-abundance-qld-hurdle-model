@@ -1,235 +1,218 @@
 # -----------------------------------------------------------------------------
-# Farauti Shiny app
+# Farauti Shiny app (MINIMAL: abundance only)
 # -----------------------------------------------------------------------------
 library(shiny)
 library(shinythemes)
 library(data.table)
 library(fst)
 library(leaflet)
-library(ggplot2)
-library(MASS)   
-library(shinycssloaders)
 library(DT)
+library(ggplot2)
+library(scales)
 
-Sys.setenv(FARAUTI_PRED_DIR = "C:/Users/men118/Projects/farauti-abundance-qld-hurdle-model/outputs/predictions")
 
-# ---- Paths (NO dir_data/dir_tables; use env var or relative path) ----
-pred_dir <- Sys.getenv(
-  "FARAUTI_PRED_DIR",
-  unset = file.path(getwd(), "predictions")
+# ---- Paths / large file config ------------------------------------------------
+library(here)
+# Allow larger uploads (default is ~5MB)
+options(shiny.maxRequestSize = 500 * 1024^2)  # 500 MB
+CENTROIDS_NAME <- "centroids_5x5_qld_with_predictions_shiny-app.fst"
+# Predictions folder (used by the UI + default file location)
+pred_dir <- tryCatch(
+  here::here("outputs", "predictions"),
+  error = function(e) file.path(getwd(), "outputs", "predictions")
+)
+default_centroids <- file.path(pred_dir, CENTROIDS_NAME)
+# Optional override via env var (power users / different file location)
+env_centroids <- Sys.getenv("FARAUTI_CENTROIDS", unset = "")
+centroids_file <- if (nzchar(env_centroids)) env_centroids else default_centroids
+
+# columns we need for abundance computation
+needed_cols <- c(
+  "grid_id","lon","lat","date","season",
+  "elev", "water_occ", "water_occ_99", "mang_rf_5km", "ppa21", "tmaxm21", "tminm21", "rhm21",       
+  paste0("pi_", c("rf","brt","max","glm","gam","ens")),
+  paste0("mu_", c("rf","brt","glm","gam","ens"))
 )
 
-centroids_file <- file.path(pred_dir, "centroids_5x5_qld_with_predictions.fst")
+# ---- App metadata ------------------------------------------------------------
+APP_TITLE   <- "Identifying mozzie hotspots"
+APP_SUBTITLE <- "Abundance across Queensland using hurdle models"
 
-# ---- Helpers ----
-std_model <- function(x) tolower(trimws(x))
+# Put the names you want shown in the About tab:
+APP_AUTHORS <- c(
+  "Manuela Mendiolar" #,
+  #"CO-AUTHOR NAME 2",
+  #"CO-AUTHOR NAME 3"
+)
 
-guess_suit_col <- function(df, dist_model) {
-  dm <- std_model(dist_model)
-  cand <- paste0("pi_", dm)
-  if (cand %in% names(df)) return(cand)
-  NA_character_
+# Optional (shows a contact line)
+APP_CONTACT <- "manuela.mendiolar@csiro.au"
+# Optional (if you want a citation line)
+APP_CITATION <- "Please cite: https://doi.org/10.5281/zenodo.17984922."
+
+
+
+# -----------------------------------------------------------------------------
+# UI helpers (small "pretty" wrappers)
+# -----------------------------------------------------------------------------
+infoPill <- function(label, value) {
+  div(class = "pill",
+      span(class = "pill-label", label),
+      span(class = "pill-value", value)
+  )
 }
 
-# ---- Suitability colour palette ----
-heat_diverging <- c(
-  "#053061", "#2166AC", "#4393C3", "#92C5DE",
-  "#f7f786ff", "#FFFF8C", "#FFE75E", "#FCD070",
-  "#D6604D", "#B2182B", "#67001F"
-)
-
-
 # ==========================================
-# ---- UI ----
+# UI
 # ==========================================
 ui <- fluidPage(
-
   theme = shinytheme("flatly"),
-
   tags$head(
     tags$title("🦟 An. farauti"),
     tags$meta(charset = "utf-8"),
     tags$style(HTML("
-    body { background: #f5f7fb; }
-    
-    .app-header {
-      background: white;
-      border-radius: 14px;
-      padding: 16px 18px;
-      margin-bottom: 14px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .app-title h3 { margin: 0; }
-    .app-title h4, .app-title h5 { margin: 0; color: #475569; }
-    .app-sub { margin-top: 6px; color: #64748b; font-size: 12px; }
-    .app-badges code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; }
-
-    .card {
-      background: white;
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 12px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-      border: 1px solid rgba(148,163,184,0.25);
-    }
-
-    .sidebar .form-group { margin-bottom: 10px; }
-    .btn-primary { border-radius: 10px; }
-
-    #hurdle_status { height: 170px; overflow-y: auto; background: #ffffffff; color: #3a5983ff; border-radius: 12px; padding: 10px; }
-    pre { white-space: pre-wrap; }
-
-    #status { background: #ffffffff; color: #3a5983ff; border-radius: 12px; padding: 10px; }
-
-    #status_box { background:#ffffffff; color: #3a5983ff; border-radius: 12px; padding: 10px; }
-
-    .dataTables_wrapper .dataTables_filter input,
-    .dataTables_wrapper .dataTables_length select {
-      border-radius: 10px !important;
-      border: 1px solid rgba(148,163,184,0.35) !important;
-      padding: 4px 8px !important;
-    }
-    .dataTables_wrapper .dt-buttons .btn {
-      border-radius: 10px !important;
-    }
-  "))),
-
+      body { background: #f5f7fb; }
+      .app-header { background: white; border-radius: 14px; padding: 16px 18px; margin-bottom: 14px;
+                    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); display: flex;
+                    align-items: center; justify-content: space-between; gap: 12px; }
+      .app-title h3 { margin: 0; }
+      .app-title h4, .app-title h5 { margin: 0; color: #475569; }
+      .app-sub { margin-top: 6px; color: #64748b; font-size: 12px; }
+      .app-badges code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; }
+      .card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 12px;
+              box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+              border: 1px solid rgba(148,163,184,0.25); }
+      .btn-primary { border-radius: 10px; }
+      #hurdle_status { height: 170px; overflow-y: auto; background: #ffffffff; color: #3a5983ff;
+                       border-radius: 12px; padding: 10px; }
+      pre { white-space: pre-wrap; }
+      #status, #status_box { background:#ffffffff; color: #3a5983ff; border-radius: 12px; padding: 10px; }
+      .dataTables_wrapper .dataTables_filter input,
+      .dataTables_wrapper .dataTables_length select {
+        border-radius: 10px !important;
+        border: 1px solid rgba(148,163,184,0.35) !important;
+        padding: 4px 8px !important;
+      }
+      .dataTables_wrapper .dt-buttons .btn { border-radius: 10px !important; }
+    "))
+  ),
   div(
     class = "app-header",
     div(
       class = "app-title",
       h3("Identifying mozzie hotspots"),
       h4(em("Anopheles farauti")),
-      h5("Predicting abundance across Queensland"),
-      div(class = "app-sub",
-          span("Data source: "),
-          span(class="app-badges", tags$code(pred_dir)),
-          span(" • Centroids file: "),
-          span(class="app-badges", tags$code(basename(centroids_file)))
-      )
-    ),
-    #tags$img(
-    #  src = "anopheles_farauti_dontbugme.png",
-    #  height = "100px",
-    #  style = "opacity: 0.95;"
-    #)
+      h5("Abundance across Queensland using hurdle models")
+    )
   ),
-
   navbarPage(
-    title = tagList(
-      tags$span("🦟", style = "font-size:18px; margin-right:6px;")
-    ),
-    tabPanel(
-      "Suitability",
-      sidebarLayout(
-        sidebarPanel(
-          width = 3,
-          div(class = "card",
-            selectInput("dist_model", "Distribution model",
-                        choices = c("BRT"="brt","RF"="rf","MAX"="max","GLM"="glm","GAM"="gam","Ensemble"="ens"),
-                        selected = "brt"),
-            numericInput("tau", label = HTML("Threshold &tau;"), value = 0.25, min = 0, max = 1, step = 0.01),
-            actionButton("update_suit", "Update map", class = "btn btn-primary")
-          ),
-          div(class = "card",
-            tags$small("Status"),
-            div(id = "status_box", verbatimTextOutput("status", placeholder = TRUE))
-          )
-        ),
-        mainPanel(
-          div(class="card",
-            withSpinner(leafletOutput("suit_map", height = "720px"), type = 6)
-          )
-        )
-      )
-    ),
-
+    title = tagList(tags$span("🦟", style = "font-size:18px; margin-right:6px;")),
+    # ABUNDANCE TAB
     tabPanel(
       "Abundance",
       sidebarLayout(
         sidebarPanel(
-          width = 3,
-          div(class="card",
-            selectInput("dist_model_h", "Distribution model",
-                        choices = c("BRT"="brt","RF"="rf","MAX"="max","GLM"="glm","GAM"="gam","Ensemble"="ens"),
-                        selected = "brt"),
-            selectInput("abund_model_h", "Abundance model (conditional on presence)",
-                        choices = c("RF"="rf","BRT"="brt","GLM"="glm","GAM"="gam","ENS"="ens"),
-                        selected = "rf"),
-            numericInput("tau_h", label = HTML("Threshold &tau;"), value = 0.25, min = 0, max = 1, step = 0.05),
-            selectInput("conf", "Predictive interval",
-                        choices = c("90%"=0.90, "95%"=0.95, "99%"=0.99),
-                        selected = 0.95),
-            numericInput("theta", label = HTML("&theta; (NB dispersion)"), value = NA_real_, min = 0.001, step = 0.1),
-            actionButton("update_hurdle", "Update map", class = "btn btn-primary")
-            ),
-          div(class="card",
-            tags$h5("Trap efficiency"),
-            tags$small("Defaults are the mean trap efficiencies from Chow et al. (used in Fig. 4). Enter as percent (%)."),
-            br(),
-            numericInput("p_wet", "Wet season (%)", value = 1.231544, min = 0.0001, step = 0.01),
-            numericInput("p_dry", "Dry season (%)", value = 1.660359, min = 0.0001, step = 0.01),
-            tags$small(tags$em("Conversion used: abundance = trapcounts / (p/100)")),
-            br(),
-            actionButton("reset_eff", "Reset to defaults", class = "btn btn-default btn-sm")
+          width = 3, 
+          tags$h4("Settings"),
+          selectInput("dist_model_h", "Distribution model", choices = c("BRT","RF","MaxEnt","GLM","GAM","ENS"), selected = "BRT"),
+          selectInput("abund_model_h", "Abundance model", choices = c("RF","BRT","GLM","GAM","ENS"), selected = "RF"),
+          numericInput("tau_h", "Threshold (τ)", value = 0.25, min = 0, max = 1, step = 0.05),
+          tags$h4("Trap efficiency (%)"),
+          fluidRow(
+            column(6, numericInput("p_wet", "Wet season", value = 1.23, min = 0.0001, step = 0.01)),
+            column(6, numericInput("p_dry", "Dry season", value = 1.66, min = 0.0001, step = 0.01))
           ),
-          div(class="card",
-            tags$small("Clicked grid summary"),
-            verbatimTextOutput("grid_summary", placeholder = TRUE)
-          ),
-          div(class="card",
-            tags$small("Status / messages"),
-            verbatimTextOutput("hurdle_status")
-          )
+          tags$h4("Uncertainty bands"),
+          sliderInput("conf", "Confidence", min = 0.5, max = 0.99, value = 0.95, step = 0.01),
+          numericInput("theta_nb", "NegBin theta (size)", value = 8, min = 0.01, step = 0.1),
+          actionButton("update_hurdle", "Update map"),
+          hr(),
+          tags$h4("Status"),
+          verbatimTextOutput("hurdle_status"),
+          verbatimTextOutput("centroids_path_txt")
         ),
-
         mainPanel(
-          div(class="card",
-            withSpinner(leafletOutput("hurdle_map", height = "520px"), type = 6)
-          ),
-          div(class="card",
-            withSpinner(plotOutput("ts_plot", height = "260px"), type = 6)
+          width = 8,
+          leafletOutput("hurdle_map", height = 520),
+          hr(),
+          div(
+            class = "card",
+            tags$h4("Time series at selected grid"),
+            tags$p(class = "hint", "Tip: click any point on the map to draw the time series and predictive interval."),
+            plotOutput("ts_plot", height = 280)
           )
         )
       )
     ),
-
+    # DATA TAB
     tabPanel(
       "Data",
       fluidPage(
-        h4("Loaded data preview"),
-        DTOutput("head_dt"),
-        hr(),
-        h4("Columns"),
-        verbatimTextOutput("cols_txt")
+        div(
+          class = "card",
+          tags$h4("Centroids file (.fst)"),
+          tags$p("Recommended: download from Zenodo and place it in the predictions folder. Or choose a local file below (best for local runs)."),
+          uiOutput("upload_ui"), #fileInput("centroids_upload", "Choose centroids .fst file", accept = c(".fst"), multiple = FALSE),
+          tags$small(
+            style="color:#64748b;", 
+            "Default path: ", tags$code(default_centroids), tags$br(),
+            "Override with env var FARAUTI_CENTROIDS: ", tags$code(if (nzchar(env_centroids)) env_centroids else "<not set>")
+          )
+        ),
+        div(class="card", tags$h4("Loaded data preview"), DTOutput("head_dt")) #,
+        #div(class="card", tags$h4("Computed map_dt preview"), DTOutput("map_preview"))
       )
     ),
-
+    # ABOUT TAB
     tabPanel(
       "About",
       fluidPage(
-        div(class = "card",
-          h3("About this app"),
-          p(
-            "This Shiny app provides an interactive view of ",
-            tags$em("Anopheles farauti"),
-            " predicted abundance across Queensland based on a hurdle model approach."
-          ),
-          tags$ul(
-            tags$li(tags$b("Suitability tab:"), " explore predicted suitability (pi_*) and apply a threshold \u03C4."),
-            tags$li(tags$b("Abundance tab:"), " view mean abundance (trap-efficiency adjusted) for 1995–1997 and click a grid cell to see its time series with predictive intervals."),
-            tags$li(tags$b("Data tab:"), " sanity-check what was loaded from the centroids predictions file.")
-          ),
-          hr(),
-          p(tags$b("Data location:"), " ", tags$code(pred_dir)),
-          p(tags$b("Centroids file:"), " ", tags$code(basename(centroids_file))),
-          tags$img(
-            src = "anopheles_farauti_dontbugme.png",
-            style = "width: 100%; max-width: 520px; display: block; margin: 12px auto; border-radius: 14px; border: 1px solid rgba(148,163,184,0.35); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);"
+        div(
+          class = "card",
+          fluidRow(
+            # ---- LEFT: text ----
+            column(
+              width = 7,
+              h3("About this app"),
+              p(
+                "This Shiny app provides an interactive view of ",
+                tags$em("Anopheles farauti"),
+                " predicted abundance across Queensland using a hurdle modelling approach."
+              ),
+              div(style="height:14px;"),
+              tags$h4("How to use"),
+              tags$ul(
+                tags$li(tags$b("Abundance tab:"), " choose a distribution model and an abundance model, set the threshold (τ) and trap efficiencies, then click ", tags$em("Update map"), ". Click any grid cell to show its time series with predictive intervals."),
+                tags$li(tags$b("Data tab:"), " confirm the centroids .fst file is found (or upload it), then inspect a preview of the loaded data. The preview highlights the currently selected model outputs (pi_… and mu_…) alongside environmental covariates.")
+              ),
+              div(style="height:14px;"),
+              tags$h4("Data & file location"),
+              p("This app reads a large centroids predictions file (", tags$code(CENTROIDS_NAME), ")."),
+              tags$ul(
+                tags$li("Default expected location: ", tags$code(file.path("outputs", "predictions", CENTROIDS_NAME))),
+                tags$li("You can override the file path via environment variable: ", tags$code("FARAUTI_CENTROIDS"), " (useful if you keep the file elsewhere).")
+              ),
+              div(style="height:14px;"),
+              tags$h4("Authors"),
+              p("Manuela Mendiolar"),
+              p(tags$b("Contact:"), " manuela.mendiolar@csiro.au"),
+              div(style="height:14px;"),
+              tags$h4("Citation"),
+              p("Please cite: ", tags$code("https://doi.org/10.5281/zenodo.17984922"))
+            ),
+            # ---- RIGHT: image ----
+            column(
+              width = 5,
+              tags$img(
+                src = "Anopheles-farauti.png",
+                style = "width: 100%; max-width: 520px; display: block; margin: 8px auto; border-radius: 14px;
+                         border: 1px solid rgba(148,163,184,0.35); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);"
+              ),
+              tags$div(
+                style = "text-align:center; color:#94a3b8; font-size:11px; margin-top:6px;",
+                  "Image: CDC/ James Gathany"
+              )
+            )
           )
         )
       )
@@ -237,441 +220,352 @@ ui <- fluidPage(
   )
 )
 
+
+
 # ==========================================
-# ---- Server ----
+# SERVER
 # ==========================================
 server <- function(input, output, session) {
 
-  centroids <- reactiveVal(NULL)
+  # ---- Reactive values ----
+  hurdle_msg <- reactiveVal("Starting up...")
+  centroids  <- reactiveVal(NULL)
+  map_dt_rv  <- reactiveVal(NULL)
+  selected_grid <- reactiveVal(NULL)
+  centroids_path <- reactiveVal(centroids_file)
 
-  output$cols_txt <- renderPrint({
-    dt <- centroids()
-    req(dt)
-    cat(paste(names(dt), collapse = "\n"))
-  })
-
-  eff_defaults <- list(p_wet = 1.231544, p_dry = 1.660359)
-  observeEvent(input$reset_eff, {
-    updateNumericInput(session, "p_wet", value = eff_defaults$p_wet)
-    updateNumericInput(session, "p_dry", value = eff_defaults$p_dry)
+  output$upload_ui <- renderUI({
+  fp <- centroids_path()
+  if (file.exists(fp)) {
+    tags$div(
+      class = "hint",
+      tags$strong("✓ File found."),
+      tags$span(" Using default/ENV path (no upload needed).")
+    )
+  } else {
+    fileInput("centroids_upload", "Choose centroids .fst file", accept = c(".fst"), multiple = FALSE)
+  }
+})
+  
+  output$centroids_path_txt <- renderText({
+    fp <- centroids_path()
+    paste0("Using centroids file:\n", normalizePath(fp, winslash = "/", mustWork = FALSE))
   })
   
-  hurdle_dt <- reactiveVal(NULL)
+  # ---- Centroids file (if uploading) ----
+  observeEvent(input$centroids_upload, {
+    req(input$centroids_upload)
+    centroids_path(input$centroids_upload$datapath)
+    hurdle_msg(paste0("Using uploaded file:\n", input$centroids_upload$name))
+  })
   
-  map_dt_rv <- reactiveVal(NULL)
-
-  selected_grid <- reactiveVal(NA_integer_)
-
-  observeEvent(input$hurdle_map_marker_click, {
-    click <- input$hurdle_map_marker_click
-    if (!is.null(click$id)) selected_grid(as.integer(click$id))
-  })
-
-  # Selected grid
-  observeEvent(selected_grid(), {
-    gid <- selected_grid()
-    req(is.finite(gid))
-    
-    dt_ts <- hurdle_dt()
-    req(dt_ts)
-
-    xy <- dt_ts[grid_id == gid][1]
-    req(nrow(xy) == 1)
-
-    leafletProxy("hurdle_map") %>%
-      removeShape("selected") %>%
-      addCircleMarkers(
-        lng = xy$lon, 
-        lat = xy$lat,
-        radius = 7,
-        color = "black",
-        weight = 2,
-        fillColor = "white",
-        fillOpacity = 0.2,
-        layerId = "selected"
-      )
-  })
-
-  # Load once on startup
-  observeEvent(TRUE, {
-    if (!file.exists(centroids_file)) {
+  # ----- Load data ONCE -----
+  observeEvent(centroids_path(), {
+    fp <- centroids_path()
+    hurdle_msg(paste0("Reading: ", fp))
+    # error msg
+    if (!file.exists(fp)) {
+      hurdle_msg(paste0(
+        "ERROR: file not found:\n", fp,
+        "\n\nDownload the .fst from Zenodo and place it in:\n", centroids_file,
+        "\nOr use the Data tab to upload/select it."
+      ))
       centroids(NULL)
       return()
     }
-    dt <- fst::read_fst(centroids_file) |> as.data.table()
+    # only read the columns we need
+    dt <- fst::read_fst(fp, columns = needed_cols) |> as.data.table()
+    
+    # basic sanity
+    missing <- setdiff(needed_cols, names(dt))
+    if (length(missing) > 0) {
+      hurdle_msg(paste0("ERROR: missing columns in file:\n- ", paste(missing, collapse = "\n- ")))
+      centroids(NULL)
+      return()
+    }
+    # date handling
+    if (!inherits(dt$date, "Date")) {
+      if (is.numeric(dt$date)) dt[, date := as.Date(date, origin = "1970-01-01")]
+      else dt[, date := as.Date(date)]
+    }
+    # season handling
+    dt[, season := as.character(season)]
+    dt[season %in% c("dry","Dry","D"), season := "D"]
+    dt[season %in% c("wet","Wet","W"), season := "W"]
+    
     centroids(dt)
-  }, once = TRUE)
+    hurdle_msg(paste0(
+      "Loaded OK.\nFile: ", fp, "\n",
+      "Rows: ", nrow(dt), "\nCols: ", ncol(dt), "\n",
+      "date class: ", paste(class(dt$date), collapse=", "), "\n",
+      "season values: ", paste(head(unique(dt$season), 5), collapse=", ")
+    ))
+  }, ignoreInit = FALSE)
 
-  # ---- Auto-fill theta if possible (works if ab_data + estimate_theta exist) ----
-  observe({
-    if (is.finite(input$theta)) return()  # user already set it
-
-    if (exists("estimate_theta", mode = "function") &&
-        exists("ab_data", envir = .GlobalEnv)) {
-
-      th <- try(estimate_theta(get("ab_data", envir = .GlobalEnv)), silent = TRUE)
-      if (!inherits(th, "try-error") && is.finite(th) && th > 0) {
-        updateNumericInput(session, "theta", value = th)
-      }
-    }
-  })
-
-  output$status <- renderPrint({
-    dt <- centroids()
-    if (is.null(dt)) {
-      cat("Data not loaded.\n")
-      cat("Check centroids_file path:\n", centroids_file, "\n")
-    } else {
-      cat("Loaded rows:", nrow(dt), "\n")
-      cat("Columns:", length(names(dt)), "\n")
-      cat("Example cols:", paste(head(names(dt), 12), collapse = ", "), "\n")
-      if ("date" %in% names(dt)) {
-        cat("date class:", paste(class(dt$date), collapse = ", "), "\n")
-      }
-    }
-  })
-
-  output$head_dt <- renderDT({
-    dt <- centroids()
-    req(dt)
-
-    wanted <- c("elev","water_occ","water_occ_99","mang_rf_5km","ppa21","tmaxm21","tminm21","rhm21")
-    missing <- setdiff(wanted, names(dt))
-    validate(need(length(missing) == 0,
-                  paste("Missing columns in centroids data:", paste(missing, collapse = ", "))))
-
-    out <- dt[, c(
-      .(lon = lon[1], lat = lat[1]),
-      lapply(.SD, function(x) mean(x, na.rm = TRUE))
-    ), by = grid_id, .SDcols = wanted]
-
-    out <- out[order(grid_id)]
-
-    DT::datatable(
-      out,
-      rownames = FALSE,
-      filter = "top",
-      extensions = c("Buttons"),
-      class = "compact stripe hover cell-border",
-      options = list(
-        pageLength = 15,
-        lengthMenu = c(10, 15, 25, 50),
-        scrollX = TRUE,
-        autoWidth = TRUE,
-        dom = "Bfrtip",
-        buttons = c("copy", "csv", "excel")
-      )) |>
-      DT::formatRound(columns = c("lon","lat"), digits = 2) %>%
-      DT::formatRound(columns = wanted, digits = 2)
-  })
-
-
-  # ---- Suitability map ----
-  output$suit_map <- renderLeaflet({
-  leaflet() %>%
-    # --- Base maps (pick the ones you like) ---
-    addProviderTiles(providers$CartoDB.Positron, group = "Light (Positron)") %>%         # clean, good labels
-    addProviderTiles(providers$CartoDB.Voyager,  group = "Voyager (more labels)") %>%   # more place names
-    addProviderTiles(providers$Esri.WorldTopoMap, group = "Topo (terrain)") %>%         # terrain-ish topo
-    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite (imagery)") %>%    # landscape features
-
-    # Optional extra: strong road/city labels
-    addProviderTiles(providers$Esri.WorldStreetMap, group = "Street (Esri)") %>%
-
-    # Layer control
-    addLayersControl(
-      baseGroups = c(
-        "Light (Positron)",
-        "Voyager (more labels)",
-        "Street (Esri)",
-        "Topo (terrain)",
-        "Satellite (imagery)"
-      ),
-      options = layersControlOptions(collapsed = TRUE)
-    ) %>%
-    hideGroup(c("Street (Esri)", "Topo (terrain)", "Satellite (imagery)")) %>%  # start clean
-    setView(lng = 145.5, lat = -18.0, zoom = 5.5)
-})
-
-
-  observeEvent(input$update_suit, {
-    dt <- centroids()
-    req(dt)
-
-    suit_col <- guess_suit_col(dt, input$dist_model)
-    validate(need(!is.na(suit_col), "Could not find a suitability column for this model in the centroids file."))
-
-    tau <- input$tau
-    validate(need(is.finite(tau), "Pick a valid tau."))
-    validate(need(all(c("lon", "lat") %in% names(dt)), "Expected columns named 'lon' and 'lat'."))
-
-    map_dt <- dt[, .(grid_id, lon, lat, suit = get(suit_col))] |> unique(by = c("grid_id", "lon", "lat"))
-    map_dt <- map_dt[is.finite(lon) & is.finite(lat) & is.finite(suit)]
-    map_dt[, present := suit >= tau]
-
-    pal <- colorNumeric(palette = heat_diverging, domain = map_dt$suit) # alternative: domain = c(0,1)
-
-    leafletProxy("suit_map", data = map_dt) %>%
-      clearMarkers() %>%
-      clearControls() %>%
-      addCircleMarkers(
-        lng = ~lon, lat = ~lat,
-        radius = 2.5, 
-        stroke = FALSE,
-        fillOpacity = 0.85,
-        color = ~pal(suit),
-        label = ~sprintf("grid: %s | suit: %.3f | present(tau=%.2f): %s", grid_id, suit, tau, present)
-      ) %>%
-      addLegend("bottomright", pal = pal, values = ~suit, title = "Suitability")
-  })
-
-
-  # ---- Abundance map ----
+  # empty map placeholder
   output$hurdle_map <- renderLeaflet({
-  leaflet() %>%
-    # --- Base maps ---
-    addProviderTiles(providers$CartoDB.Positron, group = "Light (Positron)") %>%         # clean
-    addProviderTiles(providers$CartoDB.Voyager,  group = "Voyager (more labels)") %>%   # more place names
-    addProviderTiles(providers$Esri.WorldStreetMap, group = "Street (Esri)") %>%        # strong labels
-    addProviderTiles(providers$Esri.WorldTopoMap, group = "Topo (terrain)") %>%         # terrain context
-    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite (imagery)") %>%    # imagery
+    leaflet() %>%
+      addProviderTiles(providers$CartoDB.Voyager,  group = "Voyager (more labels)") %>%
+      addProviderTiles(providers$CartoDB.Positron, group = "Light (Positron)") %>%
+      addProviderTiles(providers$Esri.WorldTopoMap, group = "Topo (terrain)") %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Satellite (imagery)") %>%
+      addProviderTiles(providers$Esri.WorldStreetMap, group = "Street (Esri)") %>%
+      addLayersControl(
+        baseGroups = c("Voyager (more labels)","Light (Positron)","Street (Esri)","Topo (terrain)","Satellite (imagery)"),
+        options = layersControlOptions(collapsed = TRUE)
+      ) %>%
+      hideGroup(c("Street (Esri)", "Topo (terrain)", "Satellite (imagery)")) %>%
+      setView(lng = 148.5, lat = -15.75, zoom = 5.5)
+  })
 
-    addLayersControl(
-      baseGroups = c(
-        "Light (Positron)",
-        "Voyager (more labels)",
-        "Street (Esri)",
-        "Topo (terrain)",
-        "Satellite (imagery)"
-      ),
-      options = layersControlOptions(collapsed = TRUE)
-    ) %>%
-    hideGroup(c("Street (Esri)", "Topo (terrain)", "Satellite (imagery)")) %>%  # start clean
-    setView(lng = 145.5, lat = -20.5, zoom = 6)
-})
+  # status output MUST be character
+  output$hurdle_status <- renderText({
+    txt <- hurdle_msg()
+    if (is.null(txt)) return("")
+    paste(as.character(txt), collapse = "\n")
+  })
 
-
-  hurdle_msg <- reactiveVal("Click 'Update map' to draw the abundance map.")
-  output$hurdle_status <- renderText(hurdle_msg())
-
+  
+  # ----- Compute abundance ONLY when button clicked -----
   observeEvent(input$update_hurdle, {
-
     dt <- centroids()
     req(dt)
-    hurdle_msg("Starting…")
+    selected_grid(NULL) # reset the selected grid when the map updates
+    leafletProxy("hurdle_map") %>% removeMarker("selected") # clear the highlight when you click “Update map”
 
-    # Ensure date is Date
-    if ("date" %in% names(dt) && !inherits(dt$date, "Date")) {
-      if (is.numeric(dt$date)) dt[, date := as.Date(dt$date, origin = "1970-01-01")]
-      else dt[, date := as.Date(dt$date)]
-    }
-
-    # Ensure season is usable
-    if (!("season" %in% names(dt))) {
-      if (!("date" %in% names(dt)) || all(is.na(dt$date))) {
-        hurdle_msg("ERROR: 'season' is missing and couldn't derive it (date missing/invalid).")
-        return()
-      }
-      m <- as.integer(format(dt$date, "%m"))
-      dt[, season := ifelse(m %in% 5:10, "D", "W")]
-    } else {
-      dt[, season := as.character(season)]
-      dt[season %in% c("dry","Dry","D"), season := "D"]
-      dt[season %in% c("wet","Wet","W"), season := "W"]
-    }
-
-    suit_col <- guess_suit_col(dt, input$dist_model_h)
-    if (is.na(suit_col)) {
-      hurdle_msg("ERROR: Could not find a suitability column for the selected distribution model.")
-      return()
-    }
-
-    tau <- input$tau_h
-    if (!is.finite(tau) || tau < 0 || tau > 1) {
-      hurdle_msg("ERROR: tau must be between 0 and 1.")
-      return()
-    }
-
-    abund_col <- paste0(
-      std_model(input$dist_model_h), "_",
-      std_model(input$abund_model_h), "_t",
-      sprintf("%03d", round(tau * 100)),
-      "_abund"
+    # validate inputs
+    validate(
+      need(is.finite(input$p_wet) && input$p_wet > 0, "Wet efficiency must be > 0"),
+      need(is.finite(input$p_dry) && input$p_dry > 0, "Dry efficiency must be > 0"),
+      need(is.finite(input$tau_h) && input$tau_h >= 0 && input$tau_h <= 1, "tau must be in [0,1]")
     )
 
-    if (!(abund_col %in% names(dt))) {
-      avail <- grep("_t\\d{3}_abund$", names(dt), value = TRUE)
-      hurdle_msg(paste0(
-        "ERROR: Missing abundance column: ", abund_col, "\n\n",
-        "Available *_abund cols (first 25):\n",
-        paste(head(avail, 25), collapse = "\n")
-      ))
-      return()
-    }
-
-    hurdle_msg(paste0("Using suit=", suit_col, " | abund=", abund_col, " | tau=", sprintf("%.2f", tau)))
-
-    # Trap efficiency (Fig 4)
-    #eff_wet <- 1.231544 / 100
-    #eff_dry <- 1.660359 / 100
-    # Trap efficiency (user-adjustable; inputs are percent)
-    validate(need(is.finite(input$p_wet) && input$p_wet > 0, "Wet season trap efficiency must be > 0%."))
-    validate(need(is.finite(input$p_dry) && input$p_dry > 0, "Dry season trap efficiency must be > 0%."))
     eff_wet <- input$p_wet / 100
     eff_dry <- input$p_dry / 100
-    
-    dt[, trapcounts := get(abund_col)]
-    dt[, abundance := ifelse(season == "D", trapcounts / eff_dry, trapcounts / eff_wet)]
+    tau <- input$tau_h
 
-    # Fig 4 time window
-    dt <- dt[date >= as.Date("1995-01-01") & date <= as.Date("1997-12-31")]
+    pi_col <- paste0("pi_", tolower(input$dist_model_h))
+    mu_col <- paste0("mu_", tolower(input$abund_model_h))
 
-    # Store time-series data (pre-threshold, but already time-windowed)
-    hurdle_dt(dt[, .(grid_id, lon, lat, date, abundance)])
-    selected_grid(NA_integer_)
+    validate(
+      need(pi_col %in% names(dt), paste0("Missing column: ", pi_col)),
+      need(mu_col %in% names(dt), paste0("Missing column: ", mu_col))
+    )
 
-    # Apply threshold and summarise mean abundance
-    dt <- dt[get(suit_col) >= tau]
+    # filter to time window
+    dt2 <- dt[date >= as.Date("1995-01-01") & date <= as.Date("1997-12-31")]
+    validate(need(nrow(dt2) > 0, "No rows in 1995–1997."))
 
-    map_dt <- dt[
-      is.finite(abundance) & abundance > 0,
-      .(lon = lon[1], lat = lat[1], mean_abund = mean(abundance, na.rm = TRUE)),
-      by = grid_id
-    ]
-    map_dt_rv(map_dt) # save map
-    
-    pal <- colorNumeric("YlOrRd", domain = map_dt$mean_abund)
+    # filter to rows that pass tau + finite preds
+    dt_sel <- dt2[is.finite(get(pi_col)) & is.finite(get(mu_col)) & get(pi_col) > tau]
+    validate(need(nrow(dt_sel) > 0, "No rows pass tau after filtering."))
+
+    # compute mean abundance per grid (trap-eff adjusted)
+    map_dt <- dt_sel[, .(
+      lon = lon[1],
+      lat = lat[1],
+      mean_abund = mean((get(pi_col) * get(mu_col)) / ifelse(season == "D", eff_dry, eff_wet), na.rm = TRUE)
+    ), by = grid_id]
+
+    # IMPORTANT debug checkpoint BEFORE plotting
+    map_dt <- map_dt[is.finite(mean_abund) & mean_abund > 0]
+
+    map_dt_rv(map_dt)
+
+    # print some debug stats in the status box
+    hurdle_msg(paste0(
+      "Computed map_dt.\n",
+      "pi=", pi_col, "\n",
+      "mu=", mu_col, "\n",
+      "tau=", tau,"\n",
+      "rows(map_dt)=", nrow(map_dt), "\n",
+      "mean_abund summary:\n",
+      paste(capture.output(print(summary(map_dt$mean_abund))), collapse="\n")
+      )
+    )
+
+    # If empty after filtering, don't plot
+    validate(need(nrow(map_dt) > 0, "map_dt empty after mean_abund > 0 filtering."))
+
+    # ---- ABUNDANCE MAP ----
+    pal <- colorNumeric("YlOrRd", domain = range(map_dt$mean_abund, na.rm = TRUE))
 
     leafletProxy("hurdle_map", data = map_dt) %>%
       clearMarkers() %>%
       clearControls() %>%
       addCircleMarkers(
-        lng = ~lon, lat = ~lat,
-        radius = 3, stroke = FALSE, fillOpacity = 0.85,
-        color = ~pal(mean_abund),
-        label = ~sprintf("grid: %s | mean abundance: %.0f", grid_id, mean_abund),
-        layerId = ~as.character(grid_id)
+        lng = ~lon, 
+        lat = ~lat,
+        layerId = ~as.character(grid_id),
+        radius = 3, 
+        stroke = FALSE, 
+        fillOpacity = 0.85,
+        color = ~pal(mean_abund)
       ) %>%
-      addLegend(
-        "bottomright", 
-        pal = pal, 
-        values = ~mean_abund, 
-        title = HTML("Abundance<br/><span style='font-size:11px;color:#475569'>(trap-efficiency adjusted)</span>")
+      addLegend("bottomright", pal = pal, values = ~mean_abund, title = "Abundance") %>%
+      addLayersControl(
+        baseGroups = c("Voyager (more labels)","Light (Positron)","Street (Esri)","Topo (terrain)","Satellite (imagery)"),
+        options = layersControlOptions(collapsed = TRUE)
+      ) %>%
+      hideGroup(c("Street (Esri)", "Topo (terrain)", "Satellite (imagery)"))
+  })
+
+
+  # ---- CLICKED GRID ID ---- 
+  # store clicked grid
+  observeEvent(input$hurdle_map_marker_click, {
+    click <- input$hurdle_map_marker_click
+    req(click$id)
+    gid <- as.integer(click$id)
+    selected_grid(gid)
+    
+    md <- map_dt_rv()
+    req(md)
+    pt <- md[grid_id == gid]
+    validate(need(nrow(pt) == 1, "Selected grid not found in current map view."))
+    
+    leafletProxy("hurdle_map") %>%
+      removeMarker("selected") %>%   # remove previous ring
+      addCircleMarkers(
+        lng = pt$lon, 
+        lat = pt$lat,
+        radius = 7,                  # bigger than base marker (3)
+        stroke = TRUE, 
+        weight = 2,
+        fillColor = "white",
+        fillOpacity = 0,             # ring only
+        color = "#111111",
+        layerId = "selected"
       )
 
-    hurdle_msg(paste0("Done. Mapped ", nrow(map_dt), " grid cells. Click a cell for the time series."))
-
-    hurdle_msg(paste0(
-      "Using suit=", suit_col,
-      " | abund=", abund_col,
-      " | tau=", sprintf("%.2f", tau),
-      " | eff_wet=", sprintf("%.3f%%", input$p_wet),
-      " | eff_dry=", sprintf("%.3f%%", input$p_dry)
-    ))
   })
-
-  output$grid_summary <- renderPrint({
+  # and draw the time series
+  output$ts_plot <- renderPlot({
+    dt <- centroids()
     gid <- selected_grid()
-    validate(need(!is.na(gid), "Click a grid cell on the map."))
+    req(dt)
+    validate(need(!is.null(gid), "Click a grid cell on the map to show its time series.")) # show a friendly message 
 
-    map_dt <- map_dt_rv()
-    dt_ts  <- hurdle_dt()
-    dt_all <- centroids()
+    tau <- input$tau_h
+    eff_wet <- input$p_wet / 100
+    eff_dry <- input$p_dry / 100
+    pi_col <- paste0("pi_", tolower(input$dist_model_h))
+    mu_col <- paste0("mu_", tolower(input$abund_model_h))
+    req(pi_col %in% names(dt), mu_col %in% names(dt))
+    # same window as map
+    dtg <- dt[grid_id == gid & date >= as.Date("1995-01-01") & date <= as.Date("1997-12-31")]
+    validate(need(nrow(dtg) > 0, "No data for selected grid in 1995–1997."))
 
-    validate(need(!is.null(map_dt), "Run 'Update map' first."))
-    validate(need(!is.null(dt_ts),  "Run 'Update map' first."))
-    validate(need(!is.null(dt_all), "Centroids data not loaded."))
+    # hurdle abundance per-row (below tau => 0)
+    dtg[, pi := get(pi_col)]
+    dtg[, mu := get(mu_col)]
+    dtg[, eff := ifelse(season == "D", eff_dry, eff_wet)]
+    dtg[, abund := data.table::fifelse(
+      is.finite(pi) & is.finite(mu) & is.finite(eff) & eff > 0 & pi > tau, (pi * mu) / eff, 0
+      )]
+    ts <- dtg[, .(abund = mean(abund, na.rm = TRUE)), by = date][order(date)]
+    #ts[, abund := round(abund)]
 
-    # row from the mapped summary table (mean abundance)
-    row <- map_dt[grid_id == gid]
-    validate(need(nrow(row) == 1, "That grid isn’t in the mapped layer (maybe filtered out by τ or abundance>0)."))
-
-    # time-series slice
-    ts <- dt_ts[grid_id == gid][order(date)]
-    validate(need(nrow(ts) > 0, "No time-series data for that grid cell."))
-
-    # covariates to summarise (means at this location)
-    covs <- c("elev","water_occ","water_occ_99","mang_rf_5km","ppa21","tmaxm21","tminm21","rhm21")
-    missing <- setdiff(covs, names(dt_all))
-    validate(need(length(missing) == 0, paste("Missing covariate columns:", paste(missing, collapse = ", "))))
-
-    # make sure date is Date (safe)
-    if ("date" %in% names(dt_all) && !inherits(dt_all$date, "Date")) {
-      if (is.numeric(dt_all$date)) dt_all[, date := as.Date(date, origin = "1970-01-01")]
-      else dt_all[, date := as.Date(date)]
-    }
-
-    # same window as mapping
-    dt_g <- dt_all[
-      grid_id == gid &
-       date >= as.Date("1995-01-01") & date <= as.Date("1997-12-31"),
-      ..covs
-    ]
-
-    # mean covariates (handle NAs)
-    cov_means <- dt_g[, lapply(.SD, function(x) mean(x, na.rm = TRUE)), .SDcols = covs]
-
-    # ---- print (ONLY requested fields) ----
-    cat("lon/lat:", sprintf("%.4f, %.4f", row$lon[1], row$lat[1]), "\n")
-    cat("mean predicted abundance (mapped):", sprintf("%.1f", row$mean_abund[1]), "\n\n")
-
-    cat("Mean covariates (1995–1997):\n")
-    cat("  elev:",       sprintf("%.2f", cov_means$elev), "\n")
-    cat("  water_occ:",  sprintf("%.2f", cov_means$water_occ), "\n")
-    cat("  water_occ_99:",sprintf("%.2f", cov_means$water_occ_99), "\n")
-    cat("  mang_rf_5km:",sprintf("%.2f", cov_means$mang_rf_5km), "\n")
-    cat("  ppa21:",      sprintf("%.3f", cov_means$ppa21), "\n")
-    cat("  tmaxm21:",    sprintf("%.2f", cov_means$tmaxm21), "\n")
-    cat("  tminm21:",    sprintf("%.2f", cov_means$tminm21), "\n")
-    cat("  rhm21:",      sprintf("%.2f", cov_means$rhm21), "\n\n")
-
-    cat("abundance (ts) mean:", sprintf("%.1f", mean(ts$abundance, na.rm = TRUE)), "\n")
-    cat("abundance (ts) max :", sprintf("%.1f", max(ts$abundance, na.rm = TRUE)), "\n")
+    # NB predictive intervals (like your manuscript)
+    conf <- input$conf
+    th   <- input$theta_nb
+    alpha <- 1 - conf
     
+    ts[, lower := qnbinom(alpha/2, mu = pmax(abund, 1e-8), size = th)]
+    ts[, upper := qnbinom(1 - alpha/2, mu = pmax(abund, 1e-8), size = th)]
+    
+    # Time-series plot: mean abundance + bands
+    ggplot(ts, aes(date)) +
+      geom_ribbon(
+        aes(ymin = lower, ymax = upper), 
+        fill = "grey50", 
+        alpha = 0.15, 
+        colour = NA
+      ) +
+      geom_line(
+        aes(y = abund),
+         colour = "#222222", 
+         linewidth = 0.35
+        ) +
+      geom_hline(
+        yintercept = 0, 
+        colour = "grey75", 
+        linewidth = 0.25
+      ) +
+      scale_x_date(
+        date_labels = "%b-%y", 
+        date_breaks = "1 months",
+        expand = expansion(c(0.01, 0.03))
+      ) +
+      labs(
+        x = NULL, 
+        y = "Abundance",
+        title = paste0("Grid ", gid)
+      ) +
+      theme_bw(base_size = 12) +
+      theme(
+        panel.grid.major = element_line(colour = "grey90", linewidth = 0.3),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 12),
+        axis.title.y = element_text(size = 13, angle = 90),
+        plot.title  = element_text(size = 10, face = "bold", hjust = 1.0)
+      )
   })
-
 
   
-  # ---- Time series with NB predictive interval bands ----
-  output$ts_plot <- renderPlot({
-    dt_ts <- hurdle_dt()
-    req(dt_ts)
-
-    gid <- selected_grid()
-    validate(need(!is.na(gid), "Click a grid cell on the map to show its time series."))
-
-    ts <- dt_ts[grid_id == gid][order(date)]
-    validate(need(nrow(ts) > 0, "No data for that grid cell."))
-
-    conf <- as.numeric(input$conf)
-    th   <- as.numeric(input$theta)
-
-    # if theta isn't available, plot line only
-    if (!is.finite(th) || th <= 0) {
-      return(
-        ggplot(ts, aes(date, abundance)) +
-          geom_line(linewidth = 0.35) +
-          labs(x = NULL, y = "Abundance (trap-efficiency adjusted)", title = paste0("Grid ", gid)) +
-          theme_bw(base_size = 11)
+  # ---- For the DATA TAB ----
+  
+  # show computed table
+  output$map_preview <- renderDT({
+    md <- map_dt_rv()
+    req(md)
+    md_show <- head(md[order(-mean_abund)], 50)  # show more if you want
+    dt_out <- DT::datatable(
+      md_show,
+      rownames = FALSE,
+      options = list(
+        pageLength = 10,
+        scrollX = TRUE,
+        dom = "tip",
+        columnDefs = list(
+          list(targets = 0, visible = FALSE)  # hide first column (grid_id)
+          )
       )
-    }
-
-    alpha <- 1 - conf
-    mu <- pmax(ts$abundance, 1e-8)
-
-    ts[, lower := qnbinom(alpha/2, size = th, mu = mu)]
-    ts[, upper := qnbinom(1 - alpha/2, size = th, mu = mu)]
-
-    ggplot(ts, aes(date, abundance)) +
-      geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.15) +
-      geom_line(linewidth = 0.35) +
-      labs(
-        #title = paste0("Grid ", gid, " (", round(conf*100), "% PI)")
-        x = NULL,
-        y = "Abundance (trap-efficiency adjusted)"       
-      ) +
-      theme_bw(base_size = 11) 
+    )
+    # round ALL numeric columns to 2 dp
+    num_cols <- names(md_show)[vapply(md_show, is.numeric, logical(1))]
+    DT::formatRound(dt_out, columns = num_cols, digits = 2)
   })
+  # show centroids table
+  output$head_dt <- renderDT({
+    dt <- centroids()
+    req(dt)
+    # build the selected columns from the dropdowns
+    pi_col <- paste0("pi_", tolower(input$dist_model_h))
+    mu_col <- paste0("mu_", tolower(input$abund_model_h))
+    # "other covariates" / context columns to always show
+    base_cols <- c("grid_id", "lon", "lat", "date", "season",
+      "elev","water_occ","water_occ_99",
+      "mang_rf_5km","ppa21","tmaxm21","tminm21", "rhm21")
+    keep_cols <- unique(c(base_cols, pi_col, mu_col))
+    keep_cols <- keep_cols[keep_cols %in% names(dt)]  # safety
+    dt_show <- head(dt[, ..keep_cols], 200)
+    dt_out <- DT::datatable(
+      dt_show,
+      rownames = FALSE,
+      options = list(
+        pageLength = 10,
+        scrollX = TRUE,
+        dom = "tip",
+        columnDefs = list(list(targets = 0, visible = FALSE))
+      )
+    )
+    # round ALL numeric columns to 2 dp
+    num_cols <- names(dt_show)[vapply(dt_show, is.numeric, logical(1))]
+    DT::formatRound(dt_out, columns = num_cols, digits = 4)
+  })
+
 }
 
 shinyApp(ui, server)
