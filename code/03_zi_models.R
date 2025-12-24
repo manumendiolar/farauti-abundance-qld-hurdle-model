@@ -8,14 +8,13 @@
 # An. farauti 
 #
 # Manuela, M.
-# 16-12-2025
+# 24-12-2025
 # ==============================================================================
 
-# FIRST RUN:
-# 02_abund_models.R
+# NOTE: Run 02_abund_models.R first (creates ab_data, get_metrics, etc.)
 
 # Auxiliary functions / setup --------------------------------------------------
-source(file.path("code", "00_setup.R"))
+source(here::here("code","00_setup.R"))
 
 
 # ------------------------------------------------------------------------------
@@ -82,16 +81,18 @@ ZINBa <- glmmTMB(
 #)
 
 
-# Predicted values
+
+# Predictions (response scale)
 preds_ZIPa  <- as.numeric(predict(ZIPa,  type = "response"))
 preds_ZINBa <- as.numeric(predict(ZINBa, type = "response"))
 
-metrics_full_zip <- get_metrics(log1p(ab_data$count), log1p(preds_ZIPa)) |>
-  dplyr::mutate(Model="ZIP",  Method="Full")
-metrics_full_zinb <- get_metrics(log1p(ab_data$count), log1p(preds_ZINBa)) |> 
+# Metrics (log1p scale)
+metrics_full_zi <- dplyr::bind_rows(
+  get_metrics(log1p(ab_data$count), log1p(preds_ZIPa)) |>
+  dplyr::mutate(Model="ZIP",  Method="Full"),
+  get_metrics(log1p(ab_data$count), log1p(preds_ZINBa)) |> 
   dplyr::mutate(Model="ZINB", Method="Full")
-
-metrics_full_zi <- dplyr::bind_rows(metrics_full_zip, metrics_full_zinb) |> 
+) |> 
   dplyr::select(Model, RMSE, MAE, Pearson, Spearman, Method)
 
 # Metrics without CV
@@ -190,16 +191,16 @@ metrics_kfold_zi_reps
 
 # Aggregate K-fold metrics across repeats
 metrics_kfold_summary <- metrics_kfold_zi_reps |> 
-  group_by(Model) |> 
-  summarise(
+  dplyr::group_by(Model) |> 
+  dplyr::summarise(
     RMSE = mean(RMSE, na.rm=TRUE),
     MAE  = mean(MAE,  na.rm=TRUE),
     Pearson  = mean(Pearson,  na.rm=TRUE),
     Spearman = mean(Spearman, na.rm=TRUE),
     .groups="drop"
   ) |> 
-  mutate(Model = factor(Model, levels=c("ZIP","ZINB"))) |> 
-  arrange(Model)
+  dplyr::mutate(Model = factor(Model, levels=c("ZIP","ZINB"))) |> 
+  dplyr::arrange(Model)
 
 # Check
 metrics_kfold_summary
