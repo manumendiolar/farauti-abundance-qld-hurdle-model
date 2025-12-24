@@ -23,7 +23,7 @@ obs <- ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |>
   filter(source %in% c("nigel","andrew")) |>  
   filter(region == "QLD") |> 
   dplyr::select(lon, lat, presence) |>
-  group_by(lon, lat) |>
+  dplyr::group_by(lon, lat) |>
   slice_max(presence, with_ties = FALSE) |> 
   ungroup()
 
@@ -34,7 +34,7 @@ obs <- rbind(obs, new_pt1, new_pt2)
 
 # Formatting
 obs <- obs |>
-  mutate(
+  dplyr::mutate(
     lon = as.numeric(lon),
     lat = as.numeric(lat),
     presence = as.integer(presence),
@@ -58,7 +58,7 @@ site_map <- c(
   E = "Eubenangee Swamp"
 )
 ab <- ab |>
-  mutate(
+  dplyr::mutate(
     site_key  = substring(gsub("[^A-Z]", "", site), 1, 1),
     site_name = unname(site_map[site_key]),
     site_name = factor(site_name, levels = unname(site_map))
@@ -67,11 +67,11 @@ ab_sf <- st_as_sf(ab, coords = c("lon","lat"), crs = 4326)
 
 # ---- Unified legend mapping ---------------------------------------------------
 obs_sf <- obs_sf |>
-  mutate(
+  dplyr::mutate(
     type = factor(ifelse(pres_f == "Presence", "Presence", "Absence"), levels = c("Absence","Presence","Abundance"))
   )
 ab_sf  <- ab_sf  |>
-  mutate(type = factor("Abundance", levels = levels(obs_sf$type)))
+  dplyr::mutate(type = factor("Abundance", levels = levels(obs_sf$type)))
 
 # Plot bbox (east coast only)
 plot_bbox <- c(xmin = 138, xmax = 155, ymin = -28, ymax = -9)
