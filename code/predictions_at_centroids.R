@@ -39,8 +39,8 @@ centroids <- impute_pi_knn(centroids, value_col = "rhm21", k = 8, lon_col = "lon
 
 
 # Add predictions form zero-inflated approach binary and count components from all models explored
-centroids$zip_abund <- as.numeric(predict(ZIPa, newdata = centroids, type = "response"))
-centroids$zinb_abund <- as.numeric(predict(ZINBa, newdata = centroids, type = "response"))
+centroids$zip_trapcounts <- as.numeric(predict(ZIPa, newdata = centroids, type = "response"))
+centroids$zinb_trapcounts <- as.numeric(predict(ZINBa, newdata = centroids, type = "response"))
 
 
 # Add predictions from binary component from all models explored
@@ -84,7 +84,7 @@ centroids$mu_ens <- as.numeric(
 )
 
 # Compute Hurdle predictions for different thresholds 
-for (thres in seq(0, 1, 0.01)){
+for (thres in seq(0, 1, 0.05)){
   thres_lbl <- gsub("\\.", "", sprintf("%.2f", thres)) # Formatting
   for (binary_model in c("rf", "brt", "max", "glm", "gam", "ens")){
     pi_col <- paste0("pi_", binary_model)                                                            # Name of pi prediction column
@@ -92,7 +92,7 @@ for (thres in seq(0, 1, 0.01)){
     centroids[[class_col]] <- as.integer(centroids[[pi_col]] > thres)                                # Compute presence class column 
     for (count_model in c("rf", "brt", "glm", "gam", "ens")){
       mu_col <- paste0("mu_", count_model)                                                           # Name of mu prediction column 
-      hurdle_col <- paste0(binary_model,"_",count_model,"_t", thres_lbl, "_abund")                   # Name of hurdle prediction column
+      hurdle_col <- paste0(binary_model,"_",count_model,"_t", thres_lbl, "_trapcounts")              # Name of hurdle prediction column
       centroids[[hurdle_col]] <- centroids[[class_col]] * centroids[[pi_col]] * centroids[[mu_col]]  # Compute hurdle abundance
     }
   }
@@ -115,25 +115,33 @@ fst::write_fst(centroids, file.path(dir_pred, "centroids_5x5_qld_with_prediction
 keep_cols <- c(
   "grid_id", "lon", "lat",
   "date", "year", "month", "season",
-  "zip_abund", "zinb_abund",
+  "elev", "water_occ", "water_occ_99", "mang_rf_5km", "ppa21", "tmaxm21", "tminm21", "rhm21",
+  "zip_trapcounts", "zinb_trapcounts",
   paste0("pi_", c("rf","brt","max","glm","gam","ens")),
   paste0("mu_", c("rf","brt","glm","gam","ens"))
 )
+
+# Final columns to keep
+cols_to_keep <- keep_cols 
 
 centroids_shiny <- centroids |> 
   # Drop *all* threshold-derived columns if they exist
   dplyr::select(
     -matches("_class_t\\d+$"),
-    -matches("_t\\d+_abund$")
   ) |> 
   # Keep only the minimal set (any_of avoids errors if a col is missing)
-  dplyr::select(any_of(keep_cols)) |> 
+  dplyr::select(any_of(cols_to_keep)) |> 
   # Make sure key columns are sensible types for Shiny filtering
   dplyr::mutate(
     date   = as.Date(date),
     year   = as.integer(as.character(year)),
     month  = as.integer(as.character(month)),
     season = as.character(season)
+  ) |> 
+  # Rename ALL *_abund columns to *_trapcounts
+  dplyr::rename_with(
+    ~ sub("_abund$", "_trapcounts", .x),
+    .cols = dplyr::ends_with("_abund")
   )
 
 # Quick sanity check
