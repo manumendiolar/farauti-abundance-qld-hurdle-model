@@ -9,7 +9,7 @@
 # distribution of An. farauti (binary model)
 #
 # Manuela, M.
-# 28-11-2025
+# 24-12-2025
 # ==============================================================================
 
 
@@ -26,25 +26,25 @@ tau <- 0.25
 asc_files  <- list.files(dir_data, pattern = "\\.asc$", full.names = TRUE)
 env_stack  <- stack(asc_files)
 names(env_stack) <- tools::file_path_sans_ext(basename(asc_files))
-env_stack
 
 # Predictors based on literature & correlation analysis
-wanted_rasters <- c("diurntemp", "seasontemp", "maxtemp", "mintemp", 
-                    "annrangetemp", "annprecip", "precipwetm", "precipdrym",
-                    "seasonprecip", "rh3ann", "dp3ann", "mangroves", "trees",
-                    "elev", "dist_coast", "water_occ", "water_occ_99")
+wanted_rasters <- c(
+  "diurntemp", "seasontemp", "maxtemp", "mintemp", 
+  "annrangetemp", "annprecip", "precipwetm", "precipdrym",
+  "seasonprecip", "rh3ann", "dp3ann", "mangroves", "trees",
+  "elev", "dist_coast", "water_occ", "water_occ_99"
+)
 
 env_stack <- subset(env_stack, wanted_rasters)
 
 # Visual check
 #plot(env_stack[[1:9]])
-#plot(env_stack[[10:17]])
 
 
 # ------------------------------------------------------------------------------
 # PRESENCE/ABSENCE DATA
 # ------------------------------------------------------------------------------
-pa <- ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |> 
+pa <- read.csv(file.path(dir_data, "ab.csv"))  |> 
   filter(source %in% c("nigel","andrew")) |>  
   filter(region == "QLD") |> 
   dplyr::select(lon, lat, presence) |>
@@ -53,19 +53,19 @@ pa <- ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |>
   ungroup()
 
 # Basic checks
-glimpse(pa)
-head(pa)
-summary(pa)
+# glimpse(pa)
+# head(pa)
+# summary(pa)
 
 # Extract environmental values at these locations
 pa <- pa[ ,c("lon", "lat", "presence")] |> 
   dplyr::bind_cols(
     as.data.frame(raster::extract(env_stack, pa[, c("lon","lat")]))
   ) |> 
-  na.omit()
+  stats::na.omit()
 
 # Explore value ranges
-summary(pa)
+# summary(pa)
 
 
 # ------------------------------------------------------------------------------
@@ -75,7 +75,6 @@ new_pt1 <- data.frame( lon = c(148.1430), lat = c(-19.9540), presence = c(1) )  
 new_pt2 <- data.frame( lon = c(149.1190), lat = c(-21.1040), presence = c(1) )  # Mackay (van den Hurk et al. 1998)
 new_pt3 <- data.frame( lon = c(145.6972), lat = c(-16.8221), presence = c(1) )  # Omitted (van den Straat et al. 2019) - outside 1979-2000 period
 
-# Current option: Bowen + Mackay
 new_points <- rbind(new_pt1, new_pt2) 
 
 # Extract environmental values at these new locations
@@ -83,13 +82,13 @@ new_points <- new_points |>
   dplyr::bind_cols(
     as.data.frame(raster::extract(env_stack, new_points[, c("lon","lat")]))
   ) |> 
-  na.omit()
+  stats::na.omit()
 
 # Check
-new_points
+# new_points
 
 # Explore value ranges
-summary(new_points)
+# summary(new_points)
 
 # NOTE: the difference in, for example, annual range temperature between pa (8.8 - 26.08) and new_points (17.48 - 19.02).
 
@@ -98,9 +97,8 @@ summary(new_points)
 #                    DATA FOR MODELLING SPECIES DISTRIBUTION
 #                        BINARY COMPONENT OF HURDLE MODEL
 # ------------------------------------------------------------------------------
-data <- rbind(pa, new_points)
-data <- as.data.frame(data)
-glimpse(data)
+data <- rbind(pa, new_points) |> 
+  as.data.frame()
 
 # Formatting: near-zero numeric to 0
 zero_threshold <- 1e-6
@@ -115,7 +113,7 @@ data <- data |>
 predictors_maxent <- env_stack
 occ_data_maxent <- data |> dplyr::filter(presence == 1) |> dplyr::select(lon, lat)
 bg_pts <- as.matrix(read.csv(file.path(dir_data, "bg_points.csv"))) # background points 
-env <- brick(env_stack) # for dismo::maxent internals
+env <- raster::brick(env_stack) # for dismo::maxent internals (kept for compatibility)
 
 
 
@@ -159,6 +157,7 @@ BRT <- gbm.step(
 # We can supply background points explicitly (these are bias‐corrected points generated earlier)
 # We set up the features types corresponding to the "best" maxent model
 # results: fc.LQ_rm.1
+# NOTE: requires Java / maxent.jar. Fail with a clear message if unavailable.
 MAX <- dismo::maxent(
     x = predictors_maxent,
     p = occ_data_maxent,
@@ -271,14 +270,12 @@ metrics_full <- bind_rows(
 # If AUC = 0.50, then weight = 0.00 (same as random)
 weights <- metrics_full$AUC - 0.5                # gain vector 
 weights <- setNames(weights, metrics_full$Model) # assign names
-weights_t <- weights - 0.5/ sum(weights)         # normalizing to sum to one
+weights_t <- weights / sum(weights)         # normalizing to sum to one
 
 # Ensemble prediction (BRT + MAX + GLM) 
-preds_ENS <- #preds_full[["RF"]] * weights_t[["RF"]] +
-  preds_full[["BRT"]] * weights_t[["BRT"]] +
+preds_ENS <- preds_full[["BRT"]] * weights_t[["BRT"]] +
   preds_full[["MAX"]] * weights_t[["MAX"]] + 
-  preds_full[["GLM"]] * weights_t[["GLM"]] #+ 
-  #preds_full[["GAM"]] * weights_t[["GAM"]]
+  preds_full[["GLM"]] * weights_t[["GLM"]] 
 
 # Update
 preds_full[["ENS"]] <- as.numeric(preds_ENS)
@@ -326,11 +323,9 @@ brt_raster <- terra::predict(env_stack_terra, BRT, type = "response", n.trees = 
 glm_raster <- terra::predict(env_stack_terra, GLM, type = "response")
 gam_raster <- terra::predict(env_stack_terra, GAM, type = "response")
 max_raster <- rast(predict(MAX, env_stack, args = "outputformat=logistic"))
-ens_raster <- #rf_raster * weights_t[["RF"]] +
-  brt_raster * weights_t[["BRT"]] +
+ens_raster <- brt_raster * weights_t[["BRT"]] +
   max_raster * weights_t[["MAX"]] +
-  glm_raster * weights_t[["GLM"]] #+ 
-  #gam_raster * weights_t[["GAM"]]
+  glm_raster * weights_t[["GLM"]]
 
 # Mask to mainland ! 
 rf_raster <- terra::mask(rf_raster, mainland)
@@ -356,38 +351,14 @@ heat_diverging <- c(
   )
 
 # Quick visual check (optional)
-plot(rf_raster,  col = heat_diverging, main = "RF")
-plot(brt_raster, col = heat_diverging, main = "BRT")
-plot(max_raster, col = heat_diverging, main = "MaxEnt")
-plot(glm_raster, col = heat_diverging, main = "GLM")
-plot(gam_raster, col = heat_diverging, main = "GAM")
-plot(ens_raster, col = heat_diverging, main = "ENS")
+# plot(rf_raster,  col = heat_diverging, main = "RF")
+# plot(brt_raster, col = heat_diverging, main = "BRT")
+# plot(max_raster, col = heat_diverging, main = "MaxEnt")
+# plot(glm_raster, col = heat_diverging, main = "GLM")
+# plot(gam_raster, col = heat_diverging, main = "GAM")
+# plot(ens_raster, col = heat_diverging, main = "ENS")
 
-# Save quick plots
-# Common colour scale for all models
-zlim  <- c(0, 1)                 # force 0–1
-brks  <- seq(0, 1, by = 0.1)     # same legend breaks for everyone
-par(mfrow = c(1, 1))             # e.g. 1 panel
-png(file = file.path(dir_plots, "pi_RF.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(rf_raster, col = heat_diverging, main = "RF", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-png(file = file.path(dir_plots, "pi_BRT.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(brt_raster, col = heat_diverging, main = "BRT", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-png(file = file.path(dir_plots, "pi_MAX.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(max_raster, col = heat_diverging, main = "MAX", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-png(file = file.path(dir_plots, "pi_GLM.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(glm_raster, col = heat_diverging, main = "GLM", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-png(file = file.path(dir_plots, "pi_GAM.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(gam_raster, col = heat_diverging, main = "GAM", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-png(file = file.path(dir_plots, "pi_ENS.png"), width = 10, height = 12, units = "cm", res = 300)
-plot(ens_raster, col = heat_diverging, main = "ENS", cex.main = 0.85, zlim = zlim, breaks = brks)
-dev.off()
-
-# Save masked raster predictions 
+# Save raster predictions 
 terra::writeRaster(rf_raster, file.path(dir_pred,  "rf_prediction.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(brt_raster, file.path(dir_pred, "brt_prediction.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(max_raster, file.path(dir_pred, "max_prediction.asc"), NAflag = -9999, overwrite = TRUE)
@@ -553,15 +524,7 @@ for (rep_i in seq_len(reps)) {
     cv_paths$MAX <- c(cv_paths$MAX, save_cv_rast(max_r_k, "MAX", rep_i, fold_idx))
     cv_paths$ENS <- c(cv_paths$ENS, save_cv_rast(ens_r_k, "ENS", rep_i, fold_idx))
     
-    # Optional quick diagnostics for each fold (commented out)
-    #par(mfrow = c(2, 3))
-    #plot(rf_r_k, main = paste0("RF fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-    #plot(brt_r_k, main = paste0("BRT fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-    #plot(max_r_k, main = paste0("MAX fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-    #plot(glm_r_k, main = paste0("GLM fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-    #plot(gam_r_k, main = paste0("GAM fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-    #plot(ens_r_k, main = paste0("ENS fold ", fold_idx, " rep ", rep_i), col = heat_diverging)
-  
+
   } # end folds loop
   
   # Avoid near-zero values 
@@ -606,12 +569,11 @@ for (rep_i in seq_len(reps)) {
 
 message("✅ Repeated K-fold complete.")
 
-# Compute uncertainty maps from cv_paths
 
-# to avoid re-running the whole k-fold cross-validation block:
-# directory that holds all the *_rep*_fold*.tif files
-cv_dir <- "C:/Users/men118/Projects/farab/outputs/predictions/cv_preds"
-# collect all RF cross-validation rasters
+# ------------------------------------------------------------------------------
+# UNCERTAINTY MAPS FROM SAVED CV RASTERS (re-load without re-running CV)
+# ------------------------------------------------------------------------------
+cv_dir <- file.path(dir_pred, "cv_preds")
 cv_paths <- list(
   RF = list.files(cv_dir, pattern = "^RF_.*\\.tif$", full.names = TRUE),
   BRT = list.files(cv_dir, pattern = "^BRT_.*\\.tif$", full.names = TRUE),
@@ -620,14 +582,15 @@ cv_paths <- list(
   GAM = list.files(cv_dir, pattern = "^GAM_.*\\.tif$", full.names = TRUE),
   ENS = list.files(cv_dir, pattern = "^ENS_.*\\.tif$", full.names = TRUE)  
 )
-# RF
+# Example for RF (repeat block kept as-is, just using cv_dir from project)
 rf_stack <- terra::rast(cv_paths$RF)
 rf_mean  <- terra::app(rf_stack, fun = "mean", na.rm = TRUE)
-rf_sd    <- terra::app(rf_stack, fun = "sd", na.rm = TRUE)
-rf_cv    <- terra::app(rf_stack, fun = "cv", na.rm = TRUE)
+rf_sd    <- terra::app(rf_stack, fun = "sd",   na.rm = TRUE)
+rf_cv    <- terra::app(rf_stack, fun = "cv",   na.rm = TRUE)
 terra::writeRaster(rf_mean, file.path(dir_pred, "rf_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
-terra::writeRaster(rf_sd, file.path(dir_pred, "rf_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
-terra::writeRaster(rf_cv, file.path(dir_pred, "rf_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
+terra::writeRaster(rf_sd,   file.path(dir_pred, "rf_cv_sd.asc"),   NAflag = -9999, overwrite = TRUE)
+terra::writeRaster(rf_cv,   file.path(dir_pred, "rf_cv_cv.asc"),   NAflag = -9999, overwrite = TRUE)
+#
 # BRT
 brt_stack <- terra::rast(cv_paths$BRT)
 brt_mean  <- terra::app(brt_stack, fun = "mean", na.rm = TRUE)
@@ -678,32 +641,12 @@ par(
 plot(rf_mean,  col = heat_diverging, main = "RF (Mean)")
 plot(rf_cv,  col = heat_diverging, main = "RF (CV)")
 plot(rf_sd,  col = heat_diverging, main = "RF (SD)")
-
-par(mfrow = c(1, 1))
-plot(brt_mean,  col = heat_diverging, main = "BRT (Mean)")
-plot(brt_cv,  col = heat_diverging, main = "BRT (CV)")
-plot(brt_sd,  col = heat_diverging, main = "BRT (SD)")
-
-plot(max_mean,  col = heat_diverging, main = "MaxEnt (Mean)")
-plot(max_cv,  col = heat_diverging, main = "MaxEnt (CV)")
-plot(max_sd,  col = heat_diverging, main = "MaxEnt (SD)")
-
-plot(glm_mean,  col = heat_diverging, main = "GLM (Mean)")
-plot(glm_cv,  col = heat_diverging, main = "GLM (CV)")
-plot(glm_sd,  col = heat_diverging, main = "GLM (SD)")
-
-plot(gam_mean,  col = heat_diverging, main = "GAM (Mean)")
-plot(gam_cv,  col = heat_diverging,main = "GAM (CV)")
-plot(gam_sd,  col = heat_diverging,main = "GAM (SD)")
-
-plot(ens_mean,  col = heat_diverging, main = "ENS (Mean)")
-plot(ens_cv,  col = heat_diverging,main = "ENS (CV)")
-plot(ens_sd,  col = heat_diverging,main = "ENS (SD)")
-
 par(mfrow = c(1, 1))
 
 
+# ------------------------------------------------------------------------------
 # Aggregate K-fold metrics across reps
+# ------------------------------------------------------------------------------
 metrics_kfold_all <- dplyr::bind_rows(all_repeat_metrics)
 
 metrics_kfold_summary <- metrics_kfold_all |> 
@@ -733,7 +676,7 @@ metrics_kfold_summary <- metrics_kfold_all |>
   )
 
 # Check
-metrics_kfold_summary 
+#metrics_kfold_summary 
 
 # Save CSV 
 write.csv(
@@ -741,8 +684,6 @@ write.csv(
   file.path(dir_tables, sprintf("binary_model_kfold_summary_%dx%dr_%.2f.csv", K, reps, tau)), 
   row.names = FALSE
 )
-
-
 
 # Simple mean table to export (means across reps)
 DIGITS <- 2
@@ -760,7 +701,7 @@ kfold_means_all <- metrics_kfold_all |>
   dplyr::mutate(dplyr::across(dplyr::all_of(all_metric_names), ~ round(.x, DIGITS)))
 
 # Check
-kfold_means_all
+#kfold_means_all
 
 # Save CSV 
 write.csv(
