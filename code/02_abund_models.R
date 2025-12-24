@@ -9,19 +9,21 @@
 # counts of An. farauti (positive counts or all depending on framework)
 #
 # Manuela, M.
-# 17-10-2025
+# 24-12-2025
 # ==============================================================================
 
     
 # Auxiliary functions / setup --------------------------------------------------
-source(file.path("code", "00_setup.R"))
+source(here::here("code","00_setup.R"))
 
 
 # Data -------------------------------------------------------------------------
 ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |> 
-  filter(source == "andrew")  |>  # Only observations from Andrew's surveys 
-  filter(region == "QLD")  |>     # Only observations from QLD surveys
-  filter(method == "T")  |>       # Only observations from trap surveys
+  dplyr::filter(
+    source == "andrew",           # Only observations from Andrew's surveys 
+    region == "QLD",              # Only observations from QLD surveys
+    method == "T"                 # Only observations from trap surveys
+  ) |> 
   dplyr::select(
     ID,                           # unique identifier 
     lon,                          # longitude (site collection)
@@ -60,10 +62,10 @@ ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |>
     water_occ_z, 
     water_occ_99_z
     )  |>
-  drop_na()  |>
-  mutate(
-    across(c(year, season, month, week), as.factor))  |>
-  distinct()
+  tidyr::drop_na()  |>
+  dplyr::mutate(
+    dplyr::across(c(year, season, month, week), as.factor))  |>
+  dplyr::distinct()
 
 
 # Check
@@ -187,7 +189,6 @@ GAMa <- mgcv::gam(
 #                       Performance metrics full data
 # ------------------------------------------------------------------------------
 preds_RFa  <- as.numeric(predict(RFa, type = "response"))
-#preds_BRTa <- as.numeric(predict(BRTa, newdata = ab_data_pos[, c("count", predictors)], n.trees = best_trees, type = "response")) 
 preds_BRTa <- as.numeric(predict(BRTa, n.trees = BRTa$gbm.call$best.trees, type = "response"))
 preds_GLMa <- as.numeric(predict(GLMa, type = "response"))
 preds_GAMa <- as.numeric(predict(GAMa, type = "response"))
@@ -323,7 +324,7 @@ for (rep_i in seq_len(reps)) {
    
     # RANDOM FOREST
     RFa_k <- randomForest(
-      count ~ year + season + month + ppa21 + tmaxm21 + tminm21 + rhm21 + elev + mang_rf_5km + water_occ,
+      count ~ year + season + month + ppa21 + tmaxm21 + tminm21 + rhm21 + elev + mang_rf_5km + water_occ + water_occ_99,
       data = df_train, 
       ntree = 1500, 
       mtry = 4,
@@ -334,6 +335,7 @@ for (rep_i in seq_len(reps)) {
     pr_RFa[te_idx] <- as.numeric(predict(RFa_k, df_test, type="response"))
 
     # BOOSTED REGRESSION TREES 
+    # Keep gbm.step settings simple/stable; use gbm fallback if needed.
     BRTa_k <- dismo::gbm.step(
       data = df_train, 
       gbm.x = which(names(df_train) %in% predictors),
