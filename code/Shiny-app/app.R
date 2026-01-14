@@ -9,7 +9,7 @@ library(leaflet)
 library(DT)
 library(ggplot2)
 library(scales)
-
+library(here)
 
 # ---- Paths / large file config ------------------------------------------------
 library(here)
@@ -24,7 +24,7 @@ pred_dir <- tryCatch(
 default_centroids <- file.path(pred_dir, CENTROIDS_NAME)
 # Optional override via env var (power users / different file location)
 env_centroids <- Sys.getenv("FARAUTI_CENTROIDS", unset = "")
-centroids_file <- if (nzchar(env_centroids)) env_centroids else default_centroids
+centroids_file <- default_centroids
 
 # columns we need for abundance computation
 needed_cols <- c(
