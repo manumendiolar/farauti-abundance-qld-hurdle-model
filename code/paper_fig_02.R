@@ -16,7 +16,7 @@
 source(here::here("code","00_setup.R"))
 
 # Comment out if you haven't ran 01_dist_models.R 
-#source(here::here("code","01_dist_models.R"))
+# source(here::here("code","01_dist_models.R"))
 
 # Load suitability rasters
 rf_raster  <- terra::rast(file.path(dir_pred, "rf_prediction.asc"))
@@ -34,13 +34,33 @@ glm_raster_sd <- terra::rast(file.path(dir_pred, "glm_cv_sd.asc"))
 gam_raster_sd <- terra::rast(file.path(dir_pred, "gam_cv_sd.asc"))
 ens_raster_sd <- terra::rast(file.path(dir_pred, "ens_cv_sd.asc"))
 
-# Load CV rasters
-rf_raster_cv  <- terra::rast(file.path(dir_pred, "rf_cv_cv.asc"))
-brt_raster_cv <- terra::rast(file.path(dir_pred, "brt_cv_cv.asc"))
-max_raster_cv <- terra::rast(file.path(dir_pred, "max_cv_cv.asc"))
-glm_raster_cv <- terra::rast(file.path(dir_pred, "glm_cv_cv.asc"))
-gam_raster_cv <- terra::rast(file.path(dir_pred, "gam_cv_cv.asc"))
-ens_raster_cv <- terra::rast(file.path(dir_pred, "ens_cv_cv.asc"))
+rf_raster_cv  <- rf_raster_sd / rf_raster
+brt_raster_cv <- brt_raster_sd / brt_raster
+max_raster_cv <- max_raster_sd / max_raster
+glm_raster_cv <- glm_raster_sd / glm_raster
+gam_raster_cv <- gam_raster_sd / gam_raster
+ens_raster_cv <- ens_raster_sd / ens_raster
+
+# # Compute CV rasters
+# # Note: suitability can be 0, so sd/suitability produces Inf. Mask non-finite
+# # cells to NA so downstream range/seq() calls stay finite.
+safe_cv <- function(sd_raster, mean_raster) {
+  cv <- sd_raster / mean_raster
+  cv[!is.finite(cv)] <- NA
+  cv
+}
+rf_raster_cv  <- safe_cv(rf_raster_sd, rf_raster)
+brt_raster_cv <- safe_cv(brt_raster_sd, brt_raster)
+max_raster_cv <- safe_cv(max_raster_sd, max_raster)
+glm_raster_cv <- safe_cv(glm_raster_sd, glm_raster)
+gam_raster_cv <- safe_cv(gam_raster_sd, gam_raster)
+ens_raster_cv <- safe_cv(ens_raster_sd, ens_raster)
+lapply(rf_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
+lapply(brt_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
+lapply(max_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
+lapply(glm_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
+lapply(gam_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
+lapply(ens_raster_cv, function(r) quantile(values(r), c(.5,.9,.95,.99,1), na.rm = TRUE))
 
 
 # Coastline: transform to raster CRS and crop to raster bbox
@@ -57,45 +77,19 @@ plot_bbox <- c(xmin = 138, xmax = 155, ymin = -28, ymax = -9)
 # A few colour palettes
 
 # Heat map style 
-heat_diverging <- c("#053061", "#2166AC", "#4393C3", "#92C5DE", 
-                    "#f7f786ff", "#FFFF8C",  "#FFE75E", "#FCD070",
-                    "#D6604D", "#B2182B", "#67001F")
-
+heat_diverging <- c("#053061", "#2166AC", "#4393C3", "#92C5DE", "#f7f786ff", "#FFFF8C",  "#FFE75E", "#FCD070", "#D6604D", "#B2182B", "#67001F")
 # Ocean to land (blue to brown)
-ocean_land <- c("#08519C", "#3182BD", "#6BAED6", "#9ECAE1", "#C6DBEF",
-                "#FEE5D9", "#FCAE91", "#FB6A4A", "#DE2D26", "#A50F15")
-
+ocean_land <- c("#08519C", "#3182BD", "#6BAED6", "#9ECAE1", "#C6DBEF", "#FEE5D9", "#FCAE91", "#FB6A4A", "#DE2D26", "#A50F15")
 # Sunset palette (purple to orange)
-sunset_palette <- c("#2D1E3E", "#453268", "#5E4892", "#8B679C", 
-                    "#C287A6", "#E6A394", "#F4B982", "#FCD070", 
-                    "#FFE75E", "#FFFF8C")
-
+sunset_palette <- c("#2D1E3E", "#453268", "#5E4892", "#8B679C", "#C287A6", "#E6A394", "#F4B982", "#FCD070", "#FFE75E", "#FFFF8C")
 # Grayscale palette (black to white)
-grey_palette <- c("#FFFFFF", "#E8E8E8", "#D0D0D0", "#A8A8A8", 
-                  "#808080", "#585858", "#303030", "#000000")
-
+grey_palette <- c("#FFFFFF", "#E8E8E8", "#D0D0D0", "#A8A8A8", "#808080", "#585858", "#303030", "#000000")
 # White to red
-white_red <- c("#FFFFFF", "#FDE0DD", "#FCC5C0", "#FA9FB5",
-               "#FB6A4A", "#EF3B2C", "#CB181D", "#99000D")
-
+white_red <- c("#FFFFFF", "#FDE0DD", "#FCC5C0", "#FA9FB5", "#FB6A4A", "#EF3B2C", "#CB181D", "#99000D")
 # Grey to red
-grey_red <- c("#F7F7F7", "#D9D9D9", "#BDBDBD", "#969696",
-              "#FB6A4A", "#EF3B2C", "#CB181D", "#99000D")
-
+grey_red <- c("#F7F7F7", "#D9D9D9", "#BDBDBD", "#969696", "#FB6A4A", "#EF3B2C", "#CB181D", "#99000D")
 # Red to red
-grey_red <- c(  
-  "#8f8a8aff",  # low–moderate CV
-  "#9a9797ff",  
-  "#cfceceff",
-  "#eee8e8ff",  # very low CV (very light grey)
-  "#FCA5A5",
-  #"#FB6A4A",
-  "#EF3B2C",
-  "#CB181D",
-  "#99000D"   # very high CV (dark red)
-)
-
-
+grey_red <- c("#8f8a8aff", "#9a9797ff", "#cfceceff", "#eee8e8ff", "#FCA5A5", "#EF3B2C", "#CB181D", "#99000D")
 # Purple to green: purple (high) → grey → green (low)
 purple_green <- c(
   "#3F007D",  # very high (dark purple)
@@ -105,15 +99,34 @@ purple_green <- c(
   "#41AB5D",  # low (green)
   "#006D2C"   # very low (dark green)
 )
-
+purple_green2 <- c(
+  "#3F007D",  # very high (dark purple)
+  "#6A51A3",  # high
+  "#D9D9D9",  # medium-high (grey)
+  "#6DCD59",  # medium-low (pale green)
+  "#1F9E89",  # low (green)
+  "#006D2C"   # very low (dark green)
+)
 # Grey to purple
 purple_grey <- c(
   "#3F007D",  # very low CV (light grey)
   "#6A51A3",
   "#D9D9D9",
-  "#A8A8A8", 
+  "#A8A8A8",
   "#808080",
   "#3e3e3eff"   # very high CV (dark purple)
+)
+
+# Viridis (dark purple low → yellow high)
+viridis_palette <- c(
+  "#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+  "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725"
+)
+
+# Magma (sequential: pale cream low → near-black high) — for uncertainty/CV
+magma_palette <- c(
+  "#FCFDBF", "#FEB078", "#F1605D", "#B63679",
+  "#721F81", "#2C115F", "#000004"
 )
 
 # For species distribution (blue to yellow to red)
@@ -122,8 +135,8 @@ distribution_palette <- heat_diverging
 # For uncertainty (light to dark, or single color gradient)
 uncertainty_palette <- grey_red
 
-# For coefficient of variation: 
-cv_palette <- purple_green
+# For coefficient of variation:
+cv_palette <- viridis_palette 
 
 
 
@@ -245,7 +258,7 @@ cities <- tribble(
 
 
 # Create the probability map with title on top
-for (i in 1:6){
+for (i in 2:2){
   rast <- aux_raster[[i]]
   rast_sd <- aux_raster_sd[[i]]
   rast_cv <- aux_raster_cv[[i]]
@@ -312,8 +325,8 @@ for (i in 1:6){
     )
 
   # Get the range for uncertainty
-  cv_range <- c(0, max(values(rast_cv), na.rm = TRUE))
-  
+  cv_range <- c(0, 1)
+
   # Create the uncertainty map with title on top
   cv_map <- create_map_panel(
     raster_input = rast_cv,
