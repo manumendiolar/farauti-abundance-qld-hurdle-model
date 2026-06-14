@@ -1,20 +1,12 @@
 # ------------------------------------------------------------------------------
-# TABLE 2 
-# Repeated stratified 10--fold cross-validation (means across 5 repetitions) 
-# performance metrics for distribution models predicting \anff\  presence. 
-# This table summarises the predictive performance of six models: 
-# Random Forest (RF), 
-# Boosted Regression Trees (BRT), 
-# Generalised Linear Model (GLM, logistic regression), 
-# Generalised Additive Model (GAM), 
-# Maximum entropy (MaxEnt), and an ensemble model (ENS). 
-# Metrics include AUC (Area Under the Curve), which measures the model's 
-# ability To discriminate between presence and absence; Balanced Accuracy (BA), 
-# the average of sensitivity and specificity; TSS (True Skill Statistic), 
-# calculated as sensitivity + specificity -- 1; and Matthews Correlation 
-# Coefficient (MCC), which evaluates the quality of classifications by 
-# accounting for true and false positives and negatives. The ensemble model 
-# combines individual predictions weighted by AUC performance. 
+# TABLE 2
+# Predictive performance of the six distribution models for \anff\ suitability.
+# Values are means from repeated stratified 10-fold cross-validation
+# (10 folds, 5 repetitions). Suitability predictions were converted to binary
+# presence-absence classifications using a threshold of 0.25 (tau = 0.25).
+# Reported metrics include AUC (Area Under the Curve), Balanced Accuracy (BA),
+# TSS (True Skill Statistic) and Matthews Correlation Coefficient (MCC).
+# Best value per metric in bold.
 # ------------------------------------------------------------------------------
 
 
@@ -51,7 +43,7 @@ rows <- apply(df, 1, function(r)
 latex <- paste0(
 "\\begin{table}[H]\n",
 "    \\centering\n",
-"    \\caption{Repeated stratified 10--fold cross-validation (means across 5 repetitions) performance metrics for distribution models predicting \\anff\\ presence. This table summarises the predictive performance of six models: Random Forest (RF), Boosted Regression Trees (BRT), Generalised Linear Model (GLM, logistic regression), Generalised Additive Model (GAM), Maximum entropy (MaxEnt), and an ensemble model (ENS). Metrics include AUC (Area Under the Curve), which measures the model's ability to discriminate between presence and absence; Balanced Accuracy (BA), the average of sensitivity and specificity; TSS (True Skill Statistic), calculated as sensitivity + specificity -- 1; and Matthews Correlation Coefficient (MCC), which evaluates the quality of classifications by accounting for true and false positives and negatives. The ensemble model combines individual predictions weighted by AUC performance. Note that continuous presence probabilities were converted to binary ``present or absent'' predictions using a threshold of ", sprintf("%.2f", tau), " ($\\tau=", sprintf("%.2f", tau), "$).}\n",
+"    \\caption{Predictive performance of the six distribution models for \\anff\\ suitability. Values are means from repeated stratified 10--fold cross-validation (10 folds, 5 repetitions). Suitability predictions were converted to binary presence--absence classifications using a threshold of ", sprintf("%.2f", tau), " ($\\tau=", sprintf("%.2f", tau), "$). Reported metrics include AUC (Area Under the Curve), Balanced Accuracy (BA), TSS (True Skill Statistic) and Matthews Correlation Coefficient (MCC). Best value per metric in bold.}\n",
 "    \\label{tab:kfold_repeated_4_metrics_binary_models}\n",
 "    \\begin{threeparttable}\n",
 "    \\rowcolors{1}{}{white}\n",

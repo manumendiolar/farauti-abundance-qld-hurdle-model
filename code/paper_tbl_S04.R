@@ -1,11 +1,9 @@
 # ------------------------------------------------------------------------------
-# TABLE 4 
-# Repeated stratified 10-fold cross-validation (means across 5 repetitions) 
-# performance metrics for abundance models fitted to all \anff\  counts. 
-# Metrics include Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), 
-# and correlation coefficients (Pearson and Spearman) between observed and 
-# predicted values. Models: Zero Inflated Poisson (ZIP) and Zero Inflated 
-# Negative Binomial (ZINB).
+# TABLE S04
+# Cross-validation performance of the zero-inflated abundance models fitted to
+# all \anff\  counts (10 folds, 5 repetitions). Metrics include Root Mean Squared
+# Error (RMSE), Mean Absolute Error (MAE) and correlation coefficients (Pearson
+# and Spearman) between observed and predicted values.
 # ------------------------------------------------------------------------------
 
 
@@ -37,7 +35,7 @@ rows <- apply(df, 1, function(r)
 latex <- paste0(
 "\\begin{table}[H]\n",
 "    \\centering\n",
-"    \\caption{Repeated stratified 10--fold cross-validation (means across 5 repetitions) performance metrics for abundance models fitted to all \\anff\\ counts. Metrics include Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), and correlation coefficients (Pearson and Spearman) between observed and predicted values. Models: Zero Inflated Poisson (ZIP) and Zero Inflated Negative Binomial (ZINB).}\n",
+"    \\caption{Cross-validation performance of the zero-inflated abundance models fitted to all \\anff\\ counts (10 folds, 5 repetitions). Metrics include Root Mean Squared Error (RMSE), Mean Absolute Error (MAE) and correlation coefficients (Pearson and Spearman) between observed and predicted values.}\n",
 "    \\label{tab:kfold_repeated_4_metrics_binary_models}\n",
 "    \\begin{threeparttable}\n",
 "    \\rowcolors{1}{}{white}\n",

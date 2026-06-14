@@ -1,13 +1,10 @@
 # ------------------------------------------------------------------------------
-# TABLE 3 
-# Repeated stratified 10-fold cross-validation (means across 5 repetitions) 
-# performance metrics for truncated count models fitted to positive counts of 
-# \anff. Metrics include Root Mean Squared Error (RMSE), Mean Absolute Error 
-# (MAE), and correlation coefficients (Pearson and Spearman) between observed 
-# and predicted values. Models: Random Forest (RF), Boosted Regression Trees 
-# (BRT), Generalised Linear Model (GLM, truncated Poisson), 
-# Generalised Additive Model (GAM, negative binomial), and 
-# Pearson-weighted ensemble (ENS).  
+# TABLE 3
+# Predictive performance of abundance models for positive \anff\ counts.
+# Values are means from repeated stratified 10-fold cross-validation
+# (10 folds, 5 repetitions). Reported metrics include Root Mean Squared Error
+# (RMSE), Mean Absolute Error (MAE), and correlation coefficients (Pearson and
+# Spearman) between observed and predicted values. Best value per metric in bold.
 # ------------------------------------------------------------------------------
 
 
@@ -39,7 +36,7 @@ rows <- apply(df, 1, function(r)
 latex <- paste0(
 "\\begin{table}[H]\n",
 "    \\centering\n",
-"    \\caption{Repeated stratified 10--fold cross-validation (means across 5 repetitions) performance metrics for truncated count models fitted to positive counts of \\anff\\. Metrics include Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), and correlation coefficients (Pearson and Spearman) between observed and predicted values. Models: Random Forest (RF), Boosted Regression Trees (BRT), Generalised Linear Model (GLM, truncated Poisson), Generalised Additive Model (GAM, negative binomial). The ensemble model combines individual predictions Pearson-weighted (ENS).}\n",
+"    \\caption{Predictive performance of abundance models for positive \\anff\\ counts. Values are means from repeated stratified 10--fold cross-validation (10 folds, 5 repetitions). Reported metrics include Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), and correlation coefficients (Pearson and Spearman) between observed and predicted values. Best value per metric in bold.}\n",
 "    \\label{tab:kfold_repeated_4_metrics_binary_models}\n",
 "    \\begin{threeparttable}\n",
 "    \\rowcolors{1}{}{white}\n",
