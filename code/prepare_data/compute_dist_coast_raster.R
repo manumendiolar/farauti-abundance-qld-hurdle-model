@@ -51,7 +51,7 @@ writeRaster(d_coast_km_ll,"distance_coast_km_wgs84.tif", overwrite = TRUE)
 library(terra)
 
 # path to your template (the WorldClim bio1 you uploaded)
-ref_raster <- rast("C:/Users/men118/OneDrive - CSIRO/Documents/GitHub/farab/data/bio1.asc")   # CRS will be EPSG:4326, 0.008333° (≈1 km) or 0.0167°/0.05°, etc.
+ref_raster <- rast("data/bio1.asc")   # WorldClim bio1 template; CRS EPSG:4326, ~1 km. Supply your own template raster here.
 ref_raster
 
 
@@ -78,9 +78,7 @@ d_coast_km_ll_aligned <- align_to_template(d_coast_km_ll, ref_raster, method = "
 # Save as .asc files
 names(d_coast_km_aligned) <- "dist_coast"
 terra::writeRaster(
-  d_coast_km_aligned, 
-  "C:/Users/men118/OneDrive - CSIRO/Documents/GitHub/farab/data/dist_coast.asc", 
-  NAflag = -9999, 
+  d_coast_km_aligned,
+  "data/dist_coast.asc",
+  NAflag = -9999,
   overwrite = TRUE)
-
-dist_coast.asc

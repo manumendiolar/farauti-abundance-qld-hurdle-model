@@ -34,7 +34,7 @@ You can run this project using **any R environment** (Positron, RStudio, or term
 ``` r
    install.packages("renv")  # only if not already installed 
    renv::restore()           # only once per fresh clone or new machine
-   source("scripts/00_setup.R")
+   source("code/00_setup.R")
 ```
 **Tip:** If `renv::restore()` asks to activate the project, answer yes.
 
@@ -49,7 +49,7 @@ source("code/03_zi_models.R")
 ## 🗺️ Predictions across Queensland
 
 ``` r
-source("scripts/predictions_at_centroids.R")
+source("code/predictions_at_centroids.R")
 
 # Optional: Map + time series plot (QLD)
 source("code/paper_fig_04.R")

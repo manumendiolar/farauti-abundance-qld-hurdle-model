@@ -108,16 +108,8 @@ ggplot(centroids_out) +
 
 # Save -------------------------------------------------------------------------
 
-# Save in current folder
 write_fst(
-  centroids_out, 
-  "C:/Users/men118/OneDrive - CSIRO/Documents/GD/Analyses/QLD/r-data-centroids-grid_5x5-QLD/centroids_buffered_land.fst", 
+  centroids_out,
+  "outputs/centroids/centroids_buffered_land.fst",
   compress = 50
 )
-
-# Save in local computer as well
-write_fst(
-  centroids_out, 
-  "C:/Users/men118/Documents/gd-project/outputs/centroids/grid_5x5-QLD/centroids_buffered_land.fst", 
-  compress = 50
-  )

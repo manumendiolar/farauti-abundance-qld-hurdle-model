@@ -165,7 +165,7 @@ legend(x = par("usr")[2] + 0.2,  # just to the right of the plot
 # # Build distance to permanent waterbodies --------------------------------------
 # 
 # # Step 0: Load the raster (already processed, with NA values set properly)
-# r <- terra::rast("C:/Users/men118/OneDrive - CSIRO/Documents/GD/Analyses/r-maxent-QLD/data/hydro/JCR/queensland_occurrence_maxent.tif")
+# r <- terra::rast("data/hydro/JCR/queensland_occurrence_maxent.tif")
 # 
 # # Step 0.5 (Optional): Aggregate to lower resolution (e.g., factor of 4)
 # r <- aggregate(r, fact = 4, fun = mean, na.rm = TRUE) # Speeds up processing a lot, adjust `fact` as needed (try 2, 4, 5)
@@ -189,5 +189,5 @@ legend(x = par("usr")[2] + 0.2,  # just to the right of the plot
 # plot(dist_to_perm_km, main = "Distance to Permanent Water (≥90%)")
 # 
 # # Step 6: Save for later use
-# writeRaster(dist_to_perm_km, "C:/Users/men118/OneDrive - CSIRO/Documents/GD/Analyses/r-maxent-QLD/data/hydro/JCR/distance_to_perm_water90_km.tif", overwrite = TRUE, NAflag = -9999)
+# writeRaster(dist_to_perm_km, "data/hydro/JCR/distance_to_perm_water90_km.tif", overwrite = TRUE, NAflag = -9999)
 
