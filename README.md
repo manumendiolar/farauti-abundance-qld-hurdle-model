@@ -40,6 +40,16 @@ You can run this project using **any R environment** (Positron, RStudio, or term
 
 ## ▶️ Running the Models
 
+**Easiest — run the whole core pipeline with one command.** From an R session at the repo root:
+
+``` r
+source("runME.R")
+```
+
+This runs every stage in the correct order (distribution → abundance → zero-inflated → trap efficiency → predictions → tables → figures) with pre-flight checks for the required input files. Edit the `run_stages` selector at the top of `runME.R` to run only part of the pipeline. A full run refits every model with repeated cross-validation and a 1,000-iteration bootstrap, so expect it to take a while (tens of minutes to hours).
+
+Or run the stages individually:
+
 ``` r
 source("code/01_dist_models.R")
 source("code/02_abund_models.R")
