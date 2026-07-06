@@ -26,6 +26,7 @@ data/**/*.img
 # OS / Editor junk
 .DS_Store
 Thumbs.db
+.vscode/
 
 # Data upon request
 data/ab.csv
