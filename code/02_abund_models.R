@@ -18,73 +18,10 @@ source(here::here("code","00_setup.R"))
 
 
 # Data -------------------------------------------------------------------------
-ab_data <- read.csv(file.path(dir_data, "ab.csv"))  |> 
-  dplyr::filter(
-    source == "andrew",           # Only observations from Andrew's surveys 
-    region == "QLD",              # Only observations from QLD surveys
-    method == "T"                 # Only observations from trap surveys
-  ) |> 
-  dplyr::select(
-    ID,                           # unique identifier 
-    lon,                          # longitude (site collection)
-    lat,                          # latitude (site collection)
-    presence,                     # response variable in distribution models (0: absent, 1: present)
-    count,                        # number of mozzies caught per trap
-    year,                         # year of site collection
-    month,                        # month of site collection
-    day,                          # day of site collection
-    date,                         # date (YYYY-MM-DD) of site collection
-    week,                         # week of site collection
-    season,                       # season (dry/wet) of site collection
-    season2,                      # season (early/late dry and early/late dry) of site collection  
-    method,                       # method of collection  
-    region,                       # region where site collection took place  
-    source,                       # data source (Nigel/Andrew's surveys)
-    ID_type, 
-    habitat,                      # habitat type (high altitude/brackish/freshwater), specifically for Andrew's dataset
-    site,                         # site location, specifically for Andrew's dataset
-    site2,                        # labels for site location
-    ppa21,                        # accumulated precipitation over the 21 days prior trap collection
-    tmaxm21,                      # mean maximum temperature over the 21 days prior trap collection
-    tminm21,                      # mean minimum temperature over the 21 days prior trap collection
-    rhm21,                        # mean relative humidity over the 21 days prior trap collection
-    water_occ,                    # frequency with which water was present on the surface from March 1984 to December 2021 (also called surface water occurrence)
-    water_occ_99,                 # derived (distance to a location with 99% frequency which water was present on the surface from March 1984 to December 2021
-    mang_rf_5km,                  # derived mangrove and rainforest cover over a 5 km radius from site collection
-    dist_coast,                   # derived distance from the site collection to the coastline (km)
-    elev,                         # elevation
-    ppa21_z,                      # standardised (each divided by their max value) version of the above mentioned variable
-    tmaxm21_z, 
-    tminm21_z, 
-    rhm21_z, 
-    elev_z, 
-    mang_rf_5km_z, 
-    water_occ_z, 
-    water_occ_99_z
-    )  |>
-  tidyr::drop_na()  |>
-  dplyr::mutate(
-    dplyr::across(c(year, season, month, week), as.factor))  |>
-  dplyr::distinct()
-
-
-# Check
-head(ab_data)
-
-# Ensure the 'date' column is Date type
-ab_data$date <- as.Date(ab_data$date, format = "%d/%m/%Y")
-
-# Check
-head(ab_data)
-glimpse(ab_data)
-
-# OPTIONAL
-# Remove records with ID 700 and 734 from the dataset
-# ab_data <- ab_data  |> filter(!ID %in% c(700, 734))  # this is just to see outcome without these...
-
-# Formatting: "near-zero values" replace with zero
-zero_threshold <- 1e-6
-ab_data <- ab_data  |> dplyr::mutate(across(where(is.numeric), ~ ifelse(abs(.) < zero_threshold, 0, .)))
+# Build the shared abundance modelling frame. The wrangling lives in
+# build_ab_data() (aux_functions.R) so 03_zi_models.R can rebuild `ab_data` on
+# its own -- cheaply, without re-running this script's cross-validation.
+ab_data <- build_ab_data()
 
 
 
@@ -249,7 +186,6 @@ metrics_full <- metrics_full  |>
 
 # Check table
 rownames(metrics_full) <- NULL
-metrics_full
 
 # Re-order
 metrics_full <- metrics_full  |> 
@@ -259,11 +195,11 @@ metrics_full <- metrics_full  |>
 metrics_full
 
 # Save
-write.csv(
-  metrics_full[ ,1:5],
-  file.path(dir_tables, "count_model_full.csv"),
-  row.names = FALSE
-)
+# write.csv(
+#   metrics_full[ ,1:5],
+#   file.path(dir_tables, "count_model_full.csv"),
+#   row.names = FALSE
+# )
 
 
 # ------------------------------------------------------------------------------
@@ -290,9 +226,12 @@ oof_ENSa <- matrix(0, nrow = npos, ncol = reps)
 
 metrics_reps <- vector("list", reps)
 
+# Progress bar + timer over all repeats x folds (reps x K fold-fits)
+cv_start <- Sys.time()
+pb <- utils::txtProgressBar(min = 0, max = reps * K, style = 3)
+
 # Repeated K-fold loop
 for (rep_i in seq_len(reps)) {
-  cat("REP: ", rep_i, "------------------------\n")
   set.seed(1000 + rep_i)
    
   folds <- caret::createFolds(
@@ -305,10 +244,8 @@ for (rep_i in seq_len(reps)) {
   pr_GLMa <- rep(0, npos)
   pr_GAMa <- rep(0, npos)
   
-  cat("fold ", "\n")
   for (k_i in seq_along(folds)) {
-    
-    cat(k_i, " ")
+    utils::setTxtProgressBar(pb, (rep_i - 1) * K + k_i)
     te_idx <- folds[[k_i]]
     tr_idx <- setdiff(seq_len(npos), te_idx)
     
@@ -357,6 +294,9 @@ for (rep_i in seq_len(reps)) {
     
     if (is.null(BRTa_k)) {
       cat("(using gbm::gbm) ")
+      # capture.output() swallows gbm's internal "CV: 1..5" fold chatter (printed via
+      # cat when cv.folds > 0). Console output only -- the model is unchanged.
+      invisible(capture.output(
       gbm_k <- gbm::gbm(
         count ~ ., data = df_train[, c("count", predictors)],
         distribution = "poisson",
@@ -366,9 +306,14 @@ for (rep_i in seq_len(reps)) {
         bag.fraction = 0.6,  # OOB only works if bag.fraction < 1
         n.minobsinnode = 5,
         cv.folds          = 5,     # <-- turn on internal K-fold CV
-        keep.data = FALSE, 
+        n.cores           = 1,     # run gbm's internal CV sequentially: parallel PSOCK
+                                   # workers don't inherit the renv library path, so they
+                                   # fail with "no package called 'gbm'". n.cores=1 avoids
+                                   # spawning workers (same result, just not parallelised).
+        keep.data = FALSE,
         verbose = FALSE
       )
+      ))
       # early stopping using OOB; use plot.it = FALSE in the loop for speed
       #best_trees <- suppressMessages(gbm::gbm.perf(gbm_k, method = "OOB", plot.it = FALSE))
       best_trees <- gbm::gbm.perf(gbm_k, method = "cv", plot.it = FALSE)
@@ -400,9 +345,8 @@ for (rep_i in seq_len(reps)) {
       )
     pr_GAMa[te_idx] <- as.numeric(predict(GAMa_k, df_test, type="response"))
     
-  } 
-  cat("\n")
-  
+  }
+
   # Ensemble OOF for this repeat (weights from full fit)
   pr_ENSa <- weights_t["RFa"]*pr_RFa + 
     weights_t["BRTa"]*pr_BRTa +
@@ -426,8 +370,8 @@ for (rep_i in seq_len(reps)) {
     )
   
   m_rep <- purrr::imap_dfr(pred_list_rep, ~{
-    #m <- get_metrics(ab_data_pos$count, .x) # original scale
-    m <- get_metrics(log1p(ab_data_pos$count), log1p(.x)) # log scale
+    m <- get_metrics(ab_data_pos$count, .x)  # original (raw) count scale = manuscript Table 3
+    #m <- get_metrics(log1p(ab_data_pos$count), log1p(.x))  # log1p scale (display only; cf. paper_fig_S07.R)
     m$Model <- .y
     m$Method <- sprintf("Kfold_%dx (rep %d)", K, rep_i)
     m
@@ -437,9 +381,13 @@ for (rep_i in seq_len(reps)) {
 
 } 
 
-# Get metrics per-repeat 
+close(pb)
+cv_mins <- round(as.numeric(difftime(Sys.time(), cv_start, units = "mins")), 1)
+message(sprintf("✅ Repeated K-fold complete (%.1f min).", cv_mins))
+
+# Get metrics per-repeat
 metrics_kfold_all_reps <- dplyr::bind_rows(metrics_reps)
-metrics_kfold_all_reps 
+#metrics_kfold_all_reps 
 
 
 # Aggregate K-fold metrics across repeats
@@ -458,10 +406,11 @@ metrics_kfold_summary <- metrics_kfold_all_reps  |>
 # Check
 metrics_kfold_summary
 
-# Save CSVs
+# Save 
+# Read by paper_tbl_03.R (Table 3) and predictions_at_centroids.R (ENS weights).
 write.csv(
   metrics_kfold_summary,
-  file.path(dir_tables, sprintf("count_model_kfold_%dx%dr_log.csv", K, reps)),
+  file.path(dir_tables, sprintf("count_model_kfold_%dx%dr.csv", K, reps)),
   row.names = FALSE
 )
 

@@ -41,24 +41,41 @@ colnames(df) <- c("Model",
                   "F1",
                   "MCC")
 
+# Full model names for display (match the manuscript). The CSV labels MaxEnt "MAX".
+model_names <- c(
+  RF   = "Random Forest",
+  BRT  = "Boosted Regression Trees",
+  MAX  = "MaxEnt",
+  GLM  = "Generalised Linear Model",
+  GAM  = "Generalised Additive Model",
+  ENS  = "Ensemble"
+)
+
 # simple formatter
 fmt <- function(x) formatC(x, format = "f", digits = 2)
 
+# Build display table: spell out model names and bold the best value per metric.
+# All ten metrics here are higher-is-better. Compare on the rounded 2-dp value so
+# display ties both bold.
+metric_cols <- c("AUC","Accuracy","Sensitivity","Specificity","BA",
+                 "Kappa","TSS","Precision","F1","MCC")
+disp <- df
+for (mc in metric_cols) {
+  vals   <- round(as.numeric(df[[mc]]), 2)
+  cell   <- fmt(as.numeric(df[[mc]]))
+  hit    <- !is.na(vals) & vals == max(vals, na.rm = TRUE)
+  cell[hit] <- paste0("\\textbf{", cell[hit], "}")
+  disp[[mc]] <- cell
+}
+disp$Model <- ifelse(is.na(model_names[as.character(df$Model)]),
+                     as.character(df$Model), model_names[as.character(df$Model)])
+
 # build LaTeX rows: Model + mean for each metric
-rows <- apply(df, 1, function(r) {
+rows <- apply(disp, 1, function(r) {
   sprintf(
     "%s & %s & %s & %s & %s & %s & %s & %s & %s & %s & %s \\\\",
-    as.character(r["Model"]),
-    fmt(as.numeric(r["AUC"])),
-    fmt(as.numeric(r["Accuracy"])),
-    fmt(as.numeric(r["Sensitivity"])),
-    fmt(as.numeric(r["Specificity"])),
-    fmt(as.numeric(r["BA"])),
-    fmt(as.numeric(r["Kappa"])),
-    fmt(as.numeric(r["TSS"])),
-    fmt(as.numeric(r["Precision"])),
-    fmt(as.numeric(r["F1"])),
-    fmt(as.numeric(r["MCC"]))
+    r["Model"], r["AUC"], r["Accuracy"], r["Sensitivity"], r["Specificity"],
+    r["BA"], r["Kappa"], r["TSS"], r["Precision"], r["F1"], r["MCC"]
   )
 })
 

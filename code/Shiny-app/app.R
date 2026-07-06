@@ -97,6 +97,21 @@ ui <- fluidPage(
             column(6, numericInput("p_wet", "Wet season", value = 1.23, min = 0.0001, step = 0.01)),
             column(6, numericInput("p_dry", "Dry season", value = 1.66, min = 0.0001, step = 0.01))
           ),
+          tags$div(
+            style = "margin: -4px 0 4px 0;",
+            tags$small(style = "color:#64748b;", "Set to Chow et al. (2025) 90% CI:"),
+            tags$div(
+              style = "margin-top: 4px; display:flex; gap:6px;",
+              actionButton("eff_lower",   "Lower",   class = "btn-sm"),
+              actionButton("eff_central", "Central", class = "btn-sm btn-primary"),
+              actionButton("eff_upper",   "Upper",   class = "btn-sm")
+            ),
+            tags$small(
+              style = "color:#94a3b8; display:block; margin-top:6px; line-height:1.4;",
+              "Wet: 0.44 / 1.23 / 2.02%  ·  Dry: 0.85 / 1.66 / 2.47%", tags$br(),
+              "(lower / central / upper efficiency)"
+            )
+          ),
           tags$h4("Predictive interval"),
           sliderInput("conf", "Coverage (e.g., 95%)", min = 0.5, max = 0.99, value = 0.95, step = 0.01),
           numericInput("theta_nb", "Overdispersion (NB 'size')", value = 8, min = 0.01, step = 0.1),
@@ -126,7 +141,9 @@ ui <- fluidPage(
         div(
           class = "card",
           tags$h4("Centroids file (.fst)"),
-          tags$p("Recommended: download from Zenodo and place it in the predictions folder. Or choose a local file below (best for local runs)."),
+          tags$p("Recommended: download from the ",
+                 tags$a(href = "https://data.csiro.au/collection/csiro:74972", "CSIRO Data Access Portal"),
+                 " and place it in the predictions folder. Or choose a local file below (best for local runs)."),
           uiOutput("upload_ui"), #fileInput("centroids_upload", "Choose centroids .fst file", accept = c(".fst"), multiple = FALSE),
           tags$small(
             style="color:#64748b;", 
@@ -160,6 +177,21 @@ ui <- fluidPage(
                 tags$li(tags$b("Data tab:"), " confirm the centroids .fst file is found (or upload it), then inspect a preview of the loaded data. The preview highlights the currently selected model outputs (pi_… and mu_…) alongside environmental covariates.")
               ),
               div(style="height:14px;"),
+              tags$h4("Trap efficiency & uncertainty"),
+              p(
+                "Predicted trap counts are converted to abundance by dividing by a trap efficiency, ",
+                "estimated from mark–release–recapture experiments (Chow et al. 2025). That efficiency ",
+                "is uncertain: its 90% confidence interval is roughly 0.4–2.0% (wet) and 0.9–2.5% (dry). ",
+                "Use the ", tags$em("Lower / Central / Upper"), " presets on the Abundance tab to carry this ",
+                "uncertainty through. Changing efficiency rescales absolute abundance by roughly ×0.6–×2.8, ",
+                "but does ", tags$b("not"), " change the hotspot ranking — within a season every cell is ",
+                "divided by the same number, so the spatial pattern is preserved."
+              ),
+              tags$small(
+                style = "color:#94a3b8;",
+                "Note: this efficiency band is separate from the predictive interval (NB overdispersion) shown on the time series."
+              ),
+              div(style="height:14px;"),
               tags$h4("Data & file location"),
               p("This app reads a large centroids predictions file (", tags$code(CENTROIDS_NAME), ")."),
               tags$ul(
@@ -172,7 +204,27 @@ ui <- fluidPage(
               p("manuela.mendiolar@csiro.au"),
               div(style="height:14px;"),
               tags$h4("Citation"),
-              p("Please cite: ", tags$code("https://doi.org/10.5281/zenodo.17984922"))
+              p("Please cite this app / code as:"),
+              p(
+                "Mendiolar, Manuela; Hickson, Roslyn; Beeton, Nick; Powell, Francisca; ",
+                "Sexton, Justin; van den Hurk, Andrew; & Trewin, Brendan (2026). ",
+                tags$em("R code for hurdle modelling of Anopheles farauti abundance in Queensland, Australia."),
+                " CSIRO. v1. Software. ",
+                tags$a(
+                  href = "https://data.csiro.au/collection/csiro:75052",
+                  "https://data.csiro.au/collection/csiro:75052"
+                )
+              ),
+              p(
+                tags$small(
+                  style = "color:#64748b;",
+                  "Predictions data (centroids .fst): ",
+                  tags$a(
+                    href = "https://data.csiro.au/collection/csiro:74972",
+                    "https://data.csiro.au/collection/csiro:74972"
+                  )
+                )
+              )
             ),
             # ---- RIGHT: image ----
             column(
@@ -241,7 +293,7 @@ server <- function(input, output, session) {
     if (!file.exists(fp)) {
       hurdle_msg(paste0(
         "ERROR: file not found:\n", fp,
-        "\n\nDownload the .fst from Zenodo and place it in:\n", centroids_file,
+        "\n\nDownload the .fst from the CSIRO Data Access Portal (https://data.csiro.au/collection/csiro:74972) and place it in:\n", centroids_file,
         "\nOr use the Data tab to upload/select it."
       ))
       centroids(NULL)
@@ -300,6 +352,23 @@ server <- function(input, output, session) {
   })
 
   
+  # ---- Trap-efficiency presets (Chow et al. 2025, 90% CI) ----
+  # Fills both season inputs; does not recompute the map (click "Update map").
+  #   lower  efficiency -> higher abundance
+  #   upper  efficiency -> lower  abundance
+  observeEvent(input$eff_lower, {
+    updateNumericInput(session, "p_wet", value = 0.44)
+    updateNumericInput(session, "p_dry", value = 0.85)
+  })
+  observeEvent(input$eff_central, {
+    updateNumericInput(session, "p_wet", value = 1.23)
+    updateNumericInput(session, "p_dry", value = 1.66)
+  })
+  observeEvent(input$eff_upper, {
+    updateNumericInput(session, "p_wet", value = 2.02)
+    updateNumericInput(session, "p_dry", value = 2.47)
+  })
+
   # ----- Compute abundance ONLY when button clicked -----
   observeEvent(input$update_hurdle, {
     dt <- centroids()

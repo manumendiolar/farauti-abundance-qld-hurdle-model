@@ -11,10 +11,13 @@
 # 24-12-2025
 # ==============================================================================
 
-# NOTE: Run 02_abund_models.R first (creates ab_data, get_metrics, etc.)
-
 # Auxiliary functions / setup --------------------------------------------------
-source(here::here("code","00_setup.R"))
+source(here::here("code", "00_setup.R"))
+
+# This script needs `ab_data` (the shared abundance modelling frame). Under
+# runME.R it already exists (built in 02); run on its own it is rebuilt cheaply
+# via build_ab_data() (aux_functions.R) -- WITHOUT re-running 02's cross-validation.
+if (!exists("ab_data")) ab_data <- build_ab_data()
 
 
 # ------------------------------------------------------------------------------
@@ -99,11 +102,11 @@ metrics_full_zi <- dplyr::bind_rows(
 metrics_full_zi
 
 # Save
-write.csv(
-  metrics_full_zi[ ,1:5],
-  file.path(dir_tables, "zi_model_full.csv"),
-  row.names = FALSE
-)
+# write.csv(
+#   metrics_full_zi[ ,1:5],
+#   file.path(dir_tables, "zi_model_full.csv"),
+#   row.names = FALSE
+# )
 
 
 
@@ -124,17 +127,19 @@ oof_ZIP   <- matrix(NA_real_, nrow = nall, ncol = REPS)
 oof_ZINB  <- matrix(NA_real_, nrow = nall, ncol = REPS)
 metrics_reps_zi <- vector("list", REPS)
 
+# Progress bar + timer over all repeats x folds (REPS x K fold-fits)
+cv_start <- Sys.time()
+pb <- utils::txtProgressBar(min = 0, max = REPS * K, style = 3)
+
 for (rep_i in seq_len(REPS)) {
-  cat("REP: ", rep_i, "------------------------\n")
   set.seed(2000 + rep_i)
   folds <- caret::createFolds(strata, k = K, list = TRUE, returnTrain = FALSE)
   
   pr_zip  <- rep(NA_real_, nall)
   pr_zinb <- rep(NA_real_, nall)
     
-  cat("fold ", "\n")
   for (k_i in seq_along(folds)) {
-    cat(k_i, " ")
+    utils::setTxtProgressBar(pb, (rep_i - 1) * K + k_i)
     te_idx <- folds[[k_i]]
     tr_idx <- setdiff(seq_len(nall), te_idx)
     
@@ -161,7 +166,6 @@ for (rep_i in seq_len(REPS)) {
     )
     pr_zinb[te_idx] <- as.numeric(predict(ZINB_fit, df_test, type = "response"))
   } 
-  cat("\n")
   oof_ZIP[ , rep_i] <- pr_zip
   oof_ZINB[ , rep_i] <- pr_zinb
 
@@ -173,8 +177,8 @@ for (rep_i in seq_len(REPS)) {
   
   m_rep <- purrr::imap_dfr(pred_list_rep, ~{
 
-    #m <- get_metrics(ab_data$count, .x) # original scale
-    m <- get_metrics(log1p(ab_data$count), log1p(.x)) # log scale
+    m <- get_metrics(ab_data$count, .x)  # original (raw) count scale = manuscript Table S4
+    #m <- get_metrics(log1p(ab_data$count), log1p(.x))  # log1p scale (display only; cf. paper_fig_S07.R)
     m$Model <- .y
     m$Method <- sprintf("Kfold_%dx (rep %d)", K, rep_i)
     m
@@ -184,9 +188,13 @@ for (rep_i in seq_len(REPS)) {
 
 } 
 
-# Get metrics per-repeat 
+close(pb)
+cv_mins <- round(as.numeric(difftime(Sys.time(), cv_start, units = "mins")), 1)
+message(sprintf("✅ Repeated K-fold complete (%.1f min).", cv_mins))
+
+# Get metrics per-repeat
 metrics_kfold_zi_reps <- dplyr::bind_rows(metrics_reps_zi)
-metrics_kfold_zi_reps 
+#metrics_kfold_zi_reps 
 
 
 # Aggregate K-fold metrics across repeats
@@ -202,13 +210,14 @@ metrics_kfold_summary <- metrics_kfold_zi_reps |>
   dplyr::mutate(Model = factor(Model, levels=c("ZIP","ZINB"))) |> 
   dplyr::arrange(Model)
 
-# Check
+# Check -- raw count scale = the values reported in the manuscript (Table S4).
 metrics_kfold_summary
 
-# Save
+# Save: raw-scale K-fold summary.
+# Read by paper_tbl_S04.R (Table S4).
 write.csv(
   metrics_kfold_summary,
-  file.path(dir_tables, sprintf("zi_model_kfold_%dx%dr_log.csv", K, REPS)),
+  file.path(dir_tables, sprintf("zi_model_kfold_%dx%dr.csv", K, REPS)),
   row.names = FALSE
 )
 

@@ -28,17 +28,38 @@ ord <- c("RF","BRT","MaxEnt","GLM","GAM","ENS")
 df$Model <- factor(df$Model, levels = ord)
 df <- df[order(df$Model), , drop = FALSE]
 
+# Full model names for display (match the manuscript)
+model_names <- c(
+  RF     = "Random Forest",
+  BRT    = "Boosted Regression Trees",
+  MaxEnt = "MaxEnt",
+  GLM    = "Generalised Linear Model",
+  GAM    = "Generalised Additive Model",
+  ENS    = "Ensemble"
+)
+
 # format numbers to 2 decimals
 fmt <- function(x) formatC(x, format = "f", digits = 2)
 
+# Build display table: spell out model names and bold the best (max) value per
+# metric, comparing on the rounded 2-dp value so display ties (e.g. BA) both bold.
+metric_cols <- c("AUC", "BA", "TSS", "MCC")
+disp <- df
+for (mc in metric_cols) {
+  vals <- round(as.numeric(df[[mc]]), 2)
+  is_best <- !is.na(vals) & vals == max(vals, na.rm = TRUE)
+  cell <- fmt(as.numeric(df[[mc]]))
+  cell[is_best] <- paste0("\\textbf{", cell[is_best], "}")
+  disp[[mc]] <- cell
+}
+disp$Model <- ifelse(is.na(model_names[as.character(df$Model)]),
+                     as.character(df$Model),
+                     model_names[as.character(df$Model)])
+
 # build LaTeX rows
-rows <- apply(df, 1, function(r)
+rows <- apply(disp, 1, function(r)
   sprintf("%s & %s & %s & %s & %s \\\\",
-          as.character(r["Model"]),
-          fmt(as.numeric(r["AUC"])),
-          fmt(as.numeric(r["BA"])),
-          fmt(as.numeric(r["TSS"])),
-          fmt(as.numeric(r["MCC"]))))
+          r["Model"], r["AUC"], r["BA"], r["TSS"], r["MCC"]))
 
 latex <- paste0(
 "\\begin{table}[H]\n",

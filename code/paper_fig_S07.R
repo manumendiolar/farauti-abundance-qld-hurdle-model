@@ -13,10 +13,10 @@
 # Panels: RF, BRT, GLM, GAM, ENS (positive-count models) + ZINB (zero-inflated).
 #
 # REQUIREMENTS:
-#   - 03_count_models.R has been run (defines:
+#   - 02_abund_models.R has been run (defines:
 #       ab_data, ab_data_pos,
 #       oof_RFa, oof_BRTa, oof_GLMa, oof_GAMa, oof_ENSa)
-#   - 04_zi_models.R has been run (defines:
+#   - 03_zi_models.R has been run (defines:
 #       oof_ZINB and uses the same ab_data object)
 #
 # Output:
@@ -42,7 +42,7 @@ missing <- setdiff(needed_objects, ls())
 if (length(missing) > 0) {
   stop(
     "The following objects are missing. ",
-    "Make sure 03_count_models.R and 04_zi_models.R have been run:\n  ",
+    "Make sure 02_abund_models.R and 03_zi_models.R have been run:\n  ",
     paste(missing, collapse = ", ")
   )
 }

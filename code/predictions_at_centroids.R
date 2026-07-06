@@ -6,10 +6,10 @@
 # colours indicating higher relative abundance. 
 # ------------------------------------------------------------------------------
 
-# FIRST RUN:
-# 02_binary_models.R
-# 03_count_models.R
-# 04_zi_models.R
+# FIRST RUN (in this order):
+# 01_dist_models.R   (presence/absence component; writes the *_prediction.asc rasters)
+# 02_abund_models.R  (positive-count component; writes count_model_kfold_10x5r.csv)
+# 03_zi_models.R     (zero-inflated models; defines ZIPa, ZINBa)
 
 
 # Auxiliary functions / setup --------------------------------------------------
@@ -72,7 +72,7 @@ centroids$mu_rf <- predict(RFa, newdata = centroids, type = "response")
 centroids$mu_brt <- predict(BRTa, newdata = centroids, n.trees = BRTa$gbm.call$best.trees, type = "response")
 centroids$mu_glm <- as.numeric(predict(GLMa, newdata = centroids, type = "response"))
 centroids$mu_gam <- as.numeric(predict(GAMa, newdata = centroids, type = "response"))
-metrics <- read.csv(file.path(dir_tables,"count_model_kfold_10x5r.csv"))
+metrics <- read.csv(file.path(dir_tables,"count_model_kfold_10x5r.csv"))  # raw-scale Pearson weights (matches Table 3)
 weights <- metrics$Pearson 
 weights <- setNames(weights, metrics$Model) 
 weights_t <- weights / sum(weights)

@@ -75,16 +75,20 @@ missing_pkgs <- required_packages[!vapply(required_packages, requireNamespace, l
 if (length(missing_pkgs) > 0) {
   msg <- paste0(
     "Missing packages: ", paste(missing_pkgs, collapse = ", "), "\n\n",
+    "Only scripts that use these will fail; others will still run.\n",
     "Recommended fix:\n",
     "  install.packages('renv')\n",
     "  renv::restore()\n\n",
     "If you are not using renv, install the missing packages manually."
   )
-  stop(msg, call. = FALSE)
+  warning(msg, call. = FALSE)
 }
 
+# Load only the packages that are actually installed, so a missing modelling
+# package does not block a script that never uses it.
+available_pkgs <- setdiff(required_packages, missing_pkgs)
 suppressPackageStartupMessages({
-  invisible(lapply(required_packages, library, character.only = TRUE))
+  invisible(lapply(available_pkgs, library, character.only = TRUE))
 })
 
 # ---- Paths -------------------------------------------------------------------

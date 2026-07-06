@@ -298,11 +298,11 @@ metrics_full <- metrics_full[, c("Model", "AUC", "Accuracy", "Sensitivity", "Spe
 metrics_full
 
 # Save
-write.csv(
-  metrics_full,
-  file.path(dir_tables, paste0("binary_model_full_", tau, ".csv")),
-  row.names = FALSE
-)
+# write.csv(
+#   metrics_full,
+#   file.path(dir_tables, paste0("binary_model_full_", tau, ".csv")),
+#   row.names = FALSE
+# )
 
 
 # ------------------------------------------------------------------------------
@@ -406,9 +406,12 @@ cv_paths <- list(
   ENS = character()
 )
 
+# Progress bar + timer over all repeats x folds (reps x K fold-fits)
+cv_start <- Sys.time()
+pb <- utils::txtProgressBar(min = 0, max = reps * K, style = 3)
+
 # Main CV loop (repeats x folds) -----------------------------------------------
 for (rep_i in seq_len(reps)) {
-  cat("Rep: ", rep_i, "\n")
   set.seed(1000 + rep_i)
   
   folds <- make_folds_once_binary_models(
@@ -424,7 +427,7 @@ for (rep_i in seq_len(reps)) {
   pr_MAX <- rep(0, n)
   
   for (fold_idx in seq_along(folds)) {
-    cat("  fold: ", fold_idx,"\n")
+    utils::setTxtProgressBar(pb, (rep_i - 1) * K + fold_idx)
 
     # Train/test indices
     test_idx  <- folds[[fold_idx]]
@@ -566,8 +569,10 @@ for (rep_i in seq_len(reps)) {
 
   all_repeat_metrics[[rep_i]] <- metrics_rep
 }
+close(pb)
 
-message("✅ Repeated K-fold complete.")
+cv_mins <- round(as.numeric(difftime(Sys.time(), cv_start, units = "mins")), 1)
+message(sprintf("✅ Repeated K-fold complete (%.1f min).", cv_mins))
 
 
 # ------------------------------------------------------------------------------
@@ -586,16 +591,21 @@ cv_paths <- list(
 rf_stack <- terra::rast(cv_paths$RF)
 rf_mean  <- terra::app(rf_stack, fun = "mean", na.rm = TRUE)
 rf_sd    <- terra::app(rf_stack, fun = "sd",   na.rm = TRUE)
-rf_cv    <- terra::app(rf_stack, fun = "cv",   na.rm = TRUE)
+rf_cv    <- rf_sd / rf_mean   # coefficient of variation = sd / mean
 terra::writeRaster(rf_mean, file.path(dir_pred, "rf_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(rf_sd,   file.path(dir_pred, "rf_cv_sd.asc"),   NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(rf_cv,   file.path(dir_pred, "rf_cv_cv.asc"),   NAflag = -9999, overwrite = TRUE)
 #
+# One minor caveat: where a cell's mean prediction is ~0, sd/mean -> Inf/NaN.
+# Not a concern for these 0–1 probability surfaces in practice.
+# If we want the CV to stay a percentage, just multiply by 100 (X_cv <- 100 * X_sd / X_mean)
+#
+# 
 # BRT
 brt_stack <- terra::rast(cv_paths$BRT)
 brt_mean  <- terra::app(brt_stack, fun = "mean", na.rm = TRUE)
 brt_sd    <- terra::app(brt_stack, fun = "sd", na.rm = TRUE)
-brt_cv    <- terra::app(brt_stack, fun = "cv", na.rm = TRUE)
+brt_cv    <- brt_sd / brt_mean   # coefficient of variation = sd / mean
 terra::writeRaster(brt_mean, file.path(dir_pred, "brt_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(brt_sd, file.path(dir_pred, "brt_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(brt_cv, file.path(dir_pred, "brt_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
@@ -603,7 +613,7 @@ terra::writeRaster(brt_cv, file.path(dir_pred, "brt_cv_cv.asc"), NAflag = -9999,
 max_stack <- terra::rast(cv_paths$MAX)
 max_mean  <- terra::app(max_stack, fun = "mean", na.rm = TRUE)
 max_sd    <- terra::app(max_stack, fun = "sd", na.rm = TRUE)
-max_cv    <- terra::app(max_stack, fun = "cv", na.rm = TRUE)
+max_cv    <- max_sd / max_mean   # coefficient of variation = sd / mean
 terra::writeRaster(max_mean, file.path(dir_pred, "max_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(max_sd, file.path(dir_pred, "max_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(max_cv, file.path(dir_pred, "max_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
@@ -611,7 +621,7 @@ terra::writeRaster(max_cv, file.path(dir_pred, "max_cv_cv.asc"), NAflag = -9999,
 glm_stack <- terra::rast(cv_paths$GLM)
 glm_mean  <- terra::app(glm_stack, fun = "mean", na.rm = TRUE)
 glm_sd    <- terra::app(glm_stack, fun = "sd", na.rm = TRUE)
-glm_cv    <- terra::app(glm_stack, fun = "cv", na.rm = TRUE)
+glm_cv    <- glm_sd / glm_mean   # coefficient of variation = sd / mean
 terra::writeRaster(glm_mean, file.path(dir_pred, "glm_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(glm_sd, file.path(dir_pred, "glm_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(glm_cv, file.path(dir_pred, "glm_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
@@ -619,7 +629,7 @@ terra::writeRaster(glm_cv, file.path(dir_pred, "glm_cv_cv.asc"), NAflag = -9999,
 gam_stack <- terra::rast(cv_paths$GAM)
 gam_mean  <- terra::app(gam_stack, fun = "mean", na.rm = TRUE)
 gam_sd    <- terra::app(gam_stack, fun = "sd", na.rm = TRUE)
-gam_cv    <- terra::app(gam_stack, fun = "cv", na.rm = TRUE)
+gam_cv    <- gam_sd / gam_mean   # coefficient of variation = sd / mean
 terra::writeRaster(gam_mean, file.path(dir_pred, "gam_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(gam_sd, file.path(dir_pred, "gam_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(gam_cv, file.path(dir_pred, "gam_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
@@ -627,20 +637,20 @@ terra::writeRaster(gam_cv, file.path(dir_pred, "gam_cv_cv.asc"), NAflag = -9999,
 ens_stack <- terra::rast(cv_paths$ENS)
 ens_mean  <- terra::app(ens_stack, fun = "mean", na.rm = TRUE)
 ens_sd    <- terra::app(ens_stack, fun = "sd", na.rm = TRUE)
-ens_cv    <- terra::app(ens_stack, fun = "cv", na.rm = TRUE)
+ens_cv    <- ens_sd / ens_mean   # coefficient of variation = sd / mean
 terra::writeRaster(ens_mean, file.path(dir_pred, "ens_cv_mean.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(ens_sd, file.path(dir_pred, "ens_cv_sd.asc"), NAflag = -9999, overwrite = TRUE)
 terra::writeRaster(ens_cv, file.path(dir_pred, "ens_cv_cv.asc"), NAflag = -9999, overwrite = TRUE)
 
 # Optional quick visual check
 par(
-  mfrow = c(1, 3),            # 1 row, 3 columns
+  mfrow = c(1, 2),            # 1 row, 2 columns
   mar   = c(1, 1, 1, 1),      # inner margins: bottom, left, top, right
   oma   = c(0, 0, 0, 0)       # outer margins
 )
-plot(rf_mean,  col = heat_diverging, main = "RF (Mean)")
-plot(rf_cv,  col = heat_diverging, main = "RF (CV)")
-plot(rf_sd,  col = heat_diverging, main = "RF (SD)")
+plot(brt_mean,  col = heat_diverging, main = "RF (Mean)")
+#plot(brt_sd,  col = heat_diverging, main = "RF (SD)")
+plot(brt_cv,  col = heat_diverging, main = "RF (CV)")
 par(mfrow = c(1, 1))
 
 
@@ -705,7 +715,15 @@ kfold_means_all <- metrics_kfold_all |>
 
 # Save CSV 
 write.csv(
-  kfold_means_all, 
-  file.path(dir_tables, sprintf("binary_model_kfold_%dx%dr_%.2f.csv", K, reps, tau)), 
+  kfold_means_all,
+  file.path(dir_tables, sprintf("binary_model_kfold_%dx%dr_%.2f.csv", K, reps, tau)),
   row.names = FALSE
 )
+
+
+# ---- Report generated outputs ------------------------------------------------
+message("\n📁 01_dist_models.R outputs:")
+message("   - Metrics CSVs        -> ", dir_tables)
+message("   - Prediction rasters  -> ", dir_pred, "  (6x *_prediction.asc)")
+message("   - Uncertainty rasters -> ", dir_pred, "  (18x *_cv_{mean,sd,cv}.asc)")
+message("   - Fold-level rasters  -> ", pred_dir, "  (", length(unlist(cv_paths)), " files)")

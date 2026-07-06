@@ -1,6 +1,6 @@
-# *Anopheles farauti* abundance in Queensland: a hurdle modelling approach manuscript
+# A hurdle modelling approach for estimating mosquito abundance
 
-This repo contains R scripts to reproduce the results in *Anopheles farauti* abundance in Queensland: a hurdle modelling approach. Basic scripts:
+This repo contains R scripts to reproduce the results in the manuscript "A hurdle modelling approach for estimating mosquito abundance: an *Anopheles farauti* case study". Basic scripts:
 
 -   `01_dist_models.R`: Fit **distribution models** (presence-absence models).
 -   `02_abund_models.R`: Fit **abundance models** (truncated count models).
@@ -18,7 +18,7 @@ This repo contains R scripts to reproduce the results in *Anopheles farauti* abu
 -   `docs/` : notes, supplementary material
 -   `renv/` : project-local R library (auto-managed)
 
-**Tip:** All scripts assume relative paths from the project root and rely on `scripts/00_setup.R`. Avoid hard-coded absolute paths.
+**Tip:** All scripts assume relative paths from the project root and rely on `code/00_setup.R`. Avoid hard-coded absolute paths.
 
 ## 🔧 Setup
 
@@ -67,11 +67,11 @@ The Shiny app requires a large prediction file that is **not included in this re
 
 -   `centroids_5x5_qld_with_predictions_shiny-app.fst`
 
-This file is hosted on Zenodo. 
+This file is hosted on the CSIRO Data Access Portal. 
 
 **Steps**
 
-1. Go to the Zenodo record: https://doi.org/10.5281/zenodo.17984922
+1. Go to the CSIRO Data Access Portal record: https://data.csiro.au/collection/csiro:74972
 2. In the “Files” section, download: centroids_5x5_qld_with_predictions_shiny-app.fst
 3. Place the file here (inside your cloned repo):
 `outputs/predictions/centroids_5x5_qld_with_predictions_shiny-app.fst`
@@ -88,10 +88,10 @@ R -e "install.packages('renv'); renv::restore(); shiny::runApp()"
 
 #### 📌 Data availability and citation
 
-The large predictions file used by the Shiny app is hosted on Zenodo:
+The large predictions file used by the Shiny app is hosted on the CSIRO Data Access Portal:
 
-Zenodo record: https://zenodo.org/records/17984922
+Data record (centroids predictions): https://data.csiro.au/collection/csiro:74972
 
-How to cite:
+How to cite this work:
 
-Mendiolar, M. (2025). Centroids with predictions: *Anopheles farauti* predicted abundance using hurdle model (Queensland, 5km grid) \[Data set\]. Zenodo. https://doi.org/10.5281/zenodo.17984922
+Mendiolar, Manuela; Hickson, Roslyn; Beeton, Nick; Powell, Francisca; Sexton, Justin; van den Hurk, Andrew; & Trewin, Brendan (2026). *R code for hurdle modelling of Anopheles farauti abundance in Queensland, Australia.* CSIRO. v1. Software. https://data.csiro.au/collection/csiro:75052

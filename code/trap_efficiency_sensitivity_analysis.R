@@ -200,7 +200,9 @@ summary_tbl <- tibble::tibble(
 ranking |> dplyr::mutate(rho = round(rho, 4)) |> print()
 
 # within-season ranking
-within_season |> dplyr::mutate(rho = round(rho, 4)) |> print()cat("\n================ TRAP-EFFICIENCY PROPAGATION SUMMARY ================\n")
+within_season |> dplyr::mutate(rho = round(rho, 4)) |> print()
+
+cat("\n================ TRAP-EFFICIENCY PROPAGATION SUMMARY ================\n")
 print(summary_tbl)
 
 readr::write_csv(summary_tbl, file.path(dir_pred, "trap_efficiency_ci_summary.csv"))

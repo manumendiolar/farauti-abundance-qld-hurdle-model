@@ -7,11 +7,13 @@
 # ------------------------------------------------------------------------------
 
 
-# Reads outputs/tables/zi_model_kfold_10x5r.csv 
+# Reads outputs/tables/zi_model_kfold_10x5r.csv -- the raw count-scale CV metrics
+# written by 03_zi_models.R (assumed to match the manuscript, Table S4, as for
+# Table 3; confirm against the paper).
 # Optional: writes a LaTeX table.
 
 infile  <- file.path("outputs", "tables", "zi_model_kfold_10x5r.csv")
-outfile <- file.path("outputs", "tables", "zi_model_kfold_table.tex")
+outfile <- file.path("outputs", "tables", "zi_model_kfold_10x5r.tex")
 
 df <- read.csv(infile, check.names = FALSE, stringsAsFactors = FALSE)
 
@@ -20,17 +22,26 @@ ord <- c("ZIP","ZINB")
 df$Model <- factor(df$Model, levels = ord)
 df <- df[order(df$Model), , drop = FALSE]
 
+# Full model names for display (match the manuscript)
+model_names <- c(
+  ZIP  = "Zero Inflated Poisson",
+  ZINB = "Zero Inflated Negative Binomial"
+)
+
 # format numbers to 2 decimals
 fmt <- function(x) formatC(x, format = "f", digits = 2)
 
+# Build display table: spell out model names. No bolding here -- the manuscript
+# Table S4 (only two models) does not bold a "best" value per metric.
+disp <- df
+for (mc in c("RMSE", "MAE", "Pearson", "Spearman")) disp[[mc]] <- fmt(as.numeric(df[[mc]]))
+disp$Model <- ifelse(is.na(model_names[as.character(df$Model)]),
+                     as.character(df$Model), model_names[as.character(df$Model)])
+
 # build LaTeX rows
-rows <- apply(df, 1, function(r)
+rows <- apply(disp, 1, function(r)
   sprintf("%s & %s & %s & %s & %s \\\\",
-          as.character(r["Model"]),
-          fmt(as.numeric(r["RMSE"])),
-          fmt(as.numeric(r["MAE"])),
-          fmt(as.numeric(r["Pearson"])),
-          fmt(as.numeric(r["Spearman"]))))
+          r["Model"], r["RMSE"], r["MAE"], r["Pearson"], r["Spearman"]))
 
 latex <- paste0(
 "\\begin{table}[H]\n",
